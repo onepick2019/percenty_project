@@ -1,0 +1,68 @@
+[22:15:10] 설정 파일이 없습니다. 기본값을 사용합니다.
+[22:15:10] Percenty 고급 다중 배치 실행기가 준비되었습니다.
+[22:15:10] 각 계정은 독립적인 프로세스에서 실행됩니다.
+[22:15:10] 설정을 확인하고 '다중 배치 시작' 버튼을 클릭하세요.
+[22:15:46] [2025-06-16 22:15:46] 주기적 실행 설정이 업데이트되었습니다: {'batch_quantity': 1, 'selected_steps': ['1', '4', '51'], 'selected_accounts': ['wop31garam@gmail.com', 'wop32gsung@gmail.com'], 'schedule_time': '22:16', 'step_interval': 30}
+[22:15:46] [2025-06-16 22:15:46] 주기적 실행이 시작되었습니다. 매일 22:16에 실행됩니다.
+[22:16:00] [2025-06-16 22:16:00] 배치 실행 시작: 수량=1, 단계=['1', '4', '51'], 계정=2개
+[22:16:00] [2025-06-16 22:16:00] 각 계정은 독립적인 프로세스에서 동시 실행됩니다.
+[22:16:00] [2025-06-16 22:16:00] 계정 wop31garam@gmail.com 처리 시작 (독립 프로세스)
+[22:16:00] [2025-06-16 22:16:00] 계정 wop31garam@gmail.com 독립 프로세스 시작됨
+[22:16:00] [2025-06-16 22:16:00] 계정 wop32gsung@gmail.com 처리 시작 (독립 프로세스)
+[22:16:00] [2025-06-16 22:16:00] 계정 wop32gsung@gmail.com 독립 프로세스 시작됨
+[22:16:00] [2025-06-16 22:16:00] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts wop31garam@gmail.com --quantity 1
+[22:16:00] [2025-06-16 22:16:00] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts wop32gsung@gmail.com --quantity 1
+[22:16:00] [2025-06-16 22:16:00] 프로세스 PID 34872 시작됨 (계정 wop32gsung@gmail.com, 단계 1)
+[22:16:00] [2025-06-16 22:16:00] 프로세스 PID 27880 시작됨 (계정 wop31garam@gmail.com, 단계 1)
+[22:16:00] [2025-06-16 22:16:00] 단계 1 실행 실패 (계정 wop31garam@gmail.com, PID 27880): 반환코드 1
+[22:16:00] [2025-06-16 22:16:00] 단계 1 실행 실패 (계정 wop32gsung@gmail.com, PID 34872): 반환코드 1
+[22:16:00] [2025-06-16 22:16:00] 오류: File "c:\Projects\percenty_project\cli\batch_cli.py", line 500
+    }
+    ^
+SyntaxError: unmatched '}'
+[22:16:00] [2025-06-16 22:16:00] 오류: File "c:\Projects\percenty_project\cli\batch_cli.py", line 500
+    }
+    ^
+SyntaxError: unmatched '}'
+[22:16:00] [2025-06-16 22:16:00] 계정 wop31garam@gmail.com, 단계 1 실패
+[22:16:00] [2025-06-16 22:16:00] 계정 wop32gsung@gmail.com, 단계 1 실패
+[22:16:00] [2025-06-16 22:16:00] 계정 wop32gsung@gmail.com: 다음 단계까지 30초 대기...
+[22:16:00] [2025-06-16 22:16:00] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[22:16:30] [2025-06-16 22:16:30] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts wop31garam@gmail.com --quantity 1
+[22:16:30] [2025-06-16 22:16:30] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts wop32gsung@gmail.com --quantity 1
+[22:16:30] [2025-06-16 22:16:30] 프로세스 PID 21860 시작됨 (계정 wop32gsung@gmail.com, 단계 4)
+[22:16:30] [2025-06-16 22:16:30] 프로세스 PID 39340 시작됨 (계정 wop31garam@gmail.com, 단계 4)
+[22:16:30] [2025-06-16 22:16:30] 단계 4 실행 실패 (계정 wop32gsung@gmail.com, PID 21860): 반환코드 1
+[22:16:30] [2025-06-16 22:16:30] 단계 4 실행 실패 (계정 wop31garam@gmail.com, PID 39340): 반환코드 1
+[22:16:30] [2025-06-16 22:16:30] 오류: File "c:\Projects\percenty_project\cli\batch_cli.py", line 500
+    }
+    ^
+SyntaxError: unmatched '}'
+[22:16:30] [2025-06-16 22:16:30] 오류: File "c:\Projects\percenty_project\cli\batch_cli.py", line 500
+    }
+    ^
+SyntaxError: unmatched '}'
+[22:16:30] [2025-06-16 22:16:30] 계정 wop32gsung@gmail.com, 단계 4 실패
+[22:16:30] [2025-06-16 22:16:30] 계정 wop31garam@gmail.com, 단계 4 실패
+[22:16:30] [2025-06-16 22:16:30] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[22:16:30] [2025-06-16 22:16:30] 계정 wop32gsung@gmail.com: 다음 단계까지 30초 대기...
+[22:17:00] [2025-06-16 22:17:00] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts wop32gsung@gmail.com --quantity 1
+[22:17:00] [2025-06-16 22:17:00] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts wop31garam@gmail.com --quantity 1
+[22:17:01] [2025-06-16 22:17:01] 프로세스 PID 42524 시작됨 (계정 wop32gsung@gmail.com, 단계 51)
+[22:17:01] [2025-06-16 22:17:01] 프로세스 PID 29160 시작됨 (계정 wop31garam@gmail.com, 단계 51)
+[22:17:01] [2025-06-16 22:17:01] 단계 51 실행 실패 (계정 wop32gsung@gmail.com, PID 42524): 반환코드 1
+[22:17:01] [2025-06-16 22:17:01] 단계 51 실행 실패 (계정 wop31garam@gmail.com, PID 29160): 반환코드 1
+[22:17:01] [2025-06-16 22:17:01] 오류: File "c:\Projects\percenty_project\cli\batch_cli.py", line 500
+    }
+    ^
+SyntaxError: unmatched '}'
+[22:17:01] [2025-06-16 22:17:01] 오류: File "c:\Projects\percenty_project\cli\batch_cli.py", line 500
+    }
+    ^
+SyntaxError: unmatched '}'
+[22:17:01] [2025-06-16 22:17:01] 계정 wop32gsung@gmail.com, 단계 51 실패
+[22:17:01] [2025-06-16 22:17:01] 계정 wop31garam@gmail.com, 단계 51 실패
+[22:17:01] [2025-06-16 22:17:01] 계정 wop31garam@gmail.com 처리 완료 (실패)
+[22:17:01] [2025-06-16 22:17:01] 계정 wop32gsung@gmail.com 처리 완료 (실패)
+[22:17:01] [2025-06-16 22:17:01] 모든 계정 처리 완료: 성공 0/2
+

@@ -1,0 +1,59 @@
+{
+  "periodic_config": {
+    "batch_quantity": 10,
+    "selected_steps": [
+      "1",
+      "21",
+      "22",
+      "23",
+      "31",
+      "32",
+      "33",
+      "4",
+      "51",
+      "52",
+      "53"
+    ],
+    "selected_accounts": "all",
+    "schedule_time": "00:32",
+    "step_interval": 30,
+    "continue_on_timeout_steps": [
+      "21",
+      "22",
+      "23",
+      "31",
+      "32",
+      "33"
+    ],
+    "critical_steps": [
+      "1",
+      "4",
+      "51",
+      "52",
+      "53"
+    ],
+    "step_timeout_settings": {
+      "21": 3600,
+      "22": 3600,
+      "23": 3600,
+      "31": 3600,
+      "32": 3600,
+      "33": 3600,
+      "default": 1800
+    },
+    "error_handling": {
+      "continue_on_error": true,
+      "continue_on_timeout": true,
+      "max_retries": 1,
+      "retry_delay": 60
+    },
+    "logging": {
+      "detailed_step_logging": true,
+      "timeout_notifications": true,
+      "success_rate_tracking": true
+    }
+  },
+  "saved_at": "2024-12-19T10:30:00",
+  "version": "2.0",
+  "description": "Enhanced periodic execution config with timeout handling"
+}

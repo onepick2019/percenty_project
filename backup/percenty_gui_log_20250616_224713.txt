@@ -1,0 +1,81 @@
+[22:37:53] 설정 파일이 없습니다. 기본값을 사용합니다.
+[22:37:54] Percenty 고급 다중 배치 실행기가 준비되었습니다.
+[22:37:54] 각 계정은 독립적인 프로세스에서 실행됩니다.
+[22:37:54] 설정을 확인하고 '다중 배치 시작' 버튼을 클릭하세요.
+[22:38:27] [2025-06-16 22:38:27] 주기적 실행 설정이 업데이트되었습니다: {'batch_quantity': 1, 'selected_steps': ['1', '4', '51'], 'selected_accounts': ['wop31garam@gmail.com', 'wop32gsung@gmail.com', 'wop33gogos@gmail.com', 'wop34goyos@gmail.com'], 'schedule_time': '22:39', 'step_interval': 30}
+[22:38:27] [2025-06-16 22:38:27] 주기적 실행이 시작되었습니다. 매일 22:39에 실행됩니다.
+[22:39:00] [2025-06-16 22:39:00] 배치 실행 시작: 수량=1, 단계=['1', '4', '51'], 계정=4개
+[22:39:00] [2025-06-16 22:39:00] 각 계정은 독립적인 프로세스에서 동시 실행됩니다.
+[22:39:00] [2025-06-16 22:39:00] 계정 wop31garam@gmail.com 처리 시작 (독립 프로세스)
+[22:39:00] [2025-06-16 22:39:00] 계정 wop31garam@gmail.com 독립 프로세스 시작됨
+[22:39:00] [2025-06-16 22:39:00] 다음 계정 실행까지 5초 대기...
+[22:39:00] [2025-06-16 22:39:00] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts wop31garam@gmail.com --quantity 1
+[22:39:00] [2025-06-16 22:39:00] 프로세스 PID 38892 시작됨 (계정 wop31garam@gmail.com, 단계 1)
+[22:39:05] [2025-06-16 22:39:05] 계정 wop32gsung@gmail.com 처리 시작 (독립 프로세스)
+[22:39:05] [2025-06-16 22:39:05] 계정 wop32gsung@gmail.com 독립 프로세스 시작됨
+[22:39:05] [2025-06-16 22:39:05] 다음 계정 실행까지 5초 대기...
+[22:39:05] [2025-06-16 22:39:05] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts wop32gsung@gmail.com --quantity 1
+[22:39:05] [2025-06-16 22:39:05] 프로세스 PID 42988 시작됨 (계정 wop32gsung@gmail.com, 단계 1)
+[22:39:10] [2025-06-16 22:39:10] 계정 wop33gogos@gmail.com 처리 시작 (독립 프로세스)
+[22:39:10] [2025-06-16 22:39:10] 계정 wop33gogos@gmail.com 독립 프로세스 시작됨
+[22:39:10] [2025-06-16 22:39:10] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts wop33gogos@gmail.com --quantity 1
+[22:39:10] [2025-06-16 22:39:10] 다음 계정 실행까지 5초 대기...
+[22:39:10] [2025-06-16 22:39:10] 프로세스 PID 3272 시작됨 (계정 wop33gogos@gmail.com, 단계 1)
+[22:39:15] [2025-06-16 22:39:15] 계정 wop34goyos@gmail.com 처리 시작 (독립 프로세스)
+[22:39:15] [2025-06-16 22:39:15] 계정 wop34goyos@gmail.com 독립 프로세스 시작됨
+[22:39:16] [2025-06-16 22:39:16] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts wop34goyos@gmail.com --quantity 1
+[22:39:16] [2025-06-16 22:39:16] 프로세스 PID 32816 시작됨 (계정 wop34goyos@gmail.com, 단계 1)
+[22:40:32] [2025-06-16 22:40:32] 단계 1 실행 성공 (계정 wop31garam@gmail.com, PID 38892)
+[22:40:32] [2025-06-16 22:40:32] 계정 wop31garam@gmail.com, 단계 1 완료
+[22:40:32] [2025-06-16 22:40:32] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[22:40:46] [2025-06-16 22:40:46] 단계 1 실행 성공 (계정 wop32gsung@gmail.com, PID 42988)
+[22:40:46] [2025-06-16 22:40:46] 계정 wop32gsung@gmail.com, 단계 1 완료
+[22:40:46] [2025-06-16 22:40:46] 계정 wop32gsung@gmail.com: 다음 단계까지 30초 대기...
+[22:40:54] [2025-06-16 22:40:54] 단계 1 실행 성공 (계정 wop33gogos@gmail.com, PID 3272)
+[22:40:54] [2025-06-16 22:40:54] 계정 wop33gogos@gmail.com, 단계 1 완료
+[22:40:54] [2025-06-16 22:40:54] 계정 wop33gogos@gmail.com: 다음 단계까지 30초 대기...
+[22:41:02] [2025-06-16 22:41:02] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts wop31garam@gmail.com --quantity 1
+[22:41:02] [2025-06-16 22:41:02] 프로세스 PID 34392 시작됨 (계정 wop31garam@gmail.com, 단계 4)
+[22:41:04] [2025-06-16 22:41:04] 단계 1 실행 성공 (계정 wop34goyos@gmail.com, PID 32816)
+[22:41:04] [2025-06-16 22:41:04] 계정 wop34goyos@gmail.com, 단계 1 완료
+[22:41:04] [2025-06-16 22:41:04] 계정 wop34goyos@gmail.com: 다음 단계까지 30초 대기...
+[22:41:16] [2025-06-16 22:41:16] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts wop32gsung@gmail.com --quantity 1
+[22:41:16] [2025-06-16 22:41:16] 프로세스 PID 11384 시작됨 (계정 wop32gsung@gmail.com, 단계 4)
+[22:41:22] [2025-06-16 22:41:22] 단계 4 실행 성공 (계정 wop31garam@gmail.com, PID 34392)
+[22:41:22] [2025-06-16 22:41:22] 계정 wop31garam@gmail.com, 단계 4 완료
+[22:41:22] [2025-06-16 22:41:22] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[22:41:24] [2025-06-16 22:41:24] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts wop33gogos@gmail.com --quantity 1
+[22:41:24] [2025-06-16 22:41:24] 프로세스 PID 18320 시작됨 (계정 wop33gogos@gmail.com, 단계 4)
+[22:41:34] [2025-06-16 22:41:34] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts wop34goyos@gmail.com --quantity 1
+[22:41:34] [2025-06-16 22:41:34] 프로세스 PID 28984 시작됨 (계정 wop34goyos@gmail.com, 단계 4)
+[22:41:37] [2025-06-16 22:41:37] 단계 4 실행 성공 (계정 wop32gsung@gmail.com, PID 11384)
+[22:41:37] [2025-06-16 22:41:37] 계정 wop32gsung@gmail.com, 단계 4 완료
+[22:41:37] [2025-06-16 22:41:37] 계정 wop32gsung@gmail.com: 다음 단계까지 30초 대기...
+[22:41:45] [2025-06-16 22:41:45] 단계 4 실행 성공 (계정 wop33gogos@gmail.com, PID 18320)
+[22:41:45] [2025-06-16 22:41:45] 계정 wop33gogos@gmail.com, 단계 4 완료
+[22:41:45] [2025-06-16 22:41:45] 계정 wop33gogos@gmail.com: 다음 단계까지 30초 대기...
+[22:41:52] [2025-06-16 22:41:52] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts wop31garam@gmail.com --quantity 1
+[22:41:52] [2025-06-16 22:41:52] 프로세스 PID 23980 시작됨 (계정 wop31garam@gmail.com, 단계 51)
+[22:41:55] [2025-06-16 22:41:55] 단계 4 실행 성공 (계정 wop34goyos@gmail.com, PID 28984)
+[22:41:55] [2025-06-16 22:41:55] 계정 wop34goyos@gmail.com, 단계 4 완료
+[22:41:55] [2025-06-16 22:41:55] 계정 wop34goyos@gmail.com: 다음 단계까지 30초 대기...
+[22:42:07] [2025-06-16 22:42:07] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts wop32gsung@gmail.com --quantity 1
+[22:42:07] [2025-06-16 22:42:07] 프로세스 PID 27296 시작됨 (계정 wop32gsung@gmail.com, 단계 51)
+[22:42:15] [2025-06-16 22:42:15] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts wop33gogos@gmail.com --quantity 1
+[22:42:15] [2025-06-16 22:42:15] 프로세스 PID 35372 시작됨 (계정 wop33gogos@gmail.com, 단계 51)
+[22:42:25] [2025-06-16 22:42:25] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts wop34goyos@gmail.com --quantity 1
+[22:42:25] [2025-06-16 22:42:25] 프로세스 PID 41276 시작됨 (계정 wop34goyos@gmail.com, 단계 51)
+[22:45:04] [2025-06-16 22:45:04] 단계 51 실행 성공 (계정 wop31garam@gmail.com, PID 23980)
+[22:45:04] [2025-06-16 22:45:04] 계정 wop31garam@gmail.com, 단계 51 완료
+[22:45:04] [2025-06-16 22:45:04] 계정 wop31garam@gmail.com 처리 완료 (성공)
+[22:45:17] [2025-06-16 22:45:17] 단계 51 실행 성공 (계정 wop32gsung@gmail.com, PID 27296)
+[22:45:17] [2025-06-16 22:45:17] 계정 wop32gsung@gmail.com, 단계 51 완료
+[22:45:17] [2025-06-16 22:45:17] 계정 wop32gsung@gmail.com 처리 완료 (성공)
+[22:45:27] [2025-06-16 22:45:27] 단계 51 실행 성공 (계정 wop33gogos@gmail.com, PID 35372)
+[22:45:27] [2025-06-16 22:45:27] 계정 wop33gogos@gmail.com, 단계 51 완료
+[22:45:27] [2025-06-16 22:45:27] 계정 wop33gogos@gmail.com 처리 완료 (성공)
+[22:45:39] [2025-06-16 22:45:39] 단계 51 실행 성공 (계정 wop34goyos@gmail.com, PID 41276)
+[22:45:39] [2025-06-16 22:45:39] 계정 wop34goyos@gmail.com, 단계 51 완료
+[22:45:39] [2025-06-16 22:45:39] 계정 wop34goyos@gmail.com 처리 완료 (성공)
+[22:45:39] [2025-06-16 22:45:39] 모든 계정 처리 완료: 성공 4/4
+

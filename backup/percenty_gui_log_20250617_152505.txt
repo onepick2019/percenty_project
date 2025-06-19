@@ -1,0 +1,159 @@
+[13:29:58] 설정 파일이 없습니다. 기본값을 사용합니다.
+[13:29:58] Percenty 고급 다중 배치 실행기가 준비되었습니다.
+[13:29:58] 각 계정은 독립적인 프로세스에서 실행됩니다.
+[13:29:58] 설정을 확인하고 '다중 배치 시작' 버튼을 클릭하세요.
+[13:42:45] [2025-06-17 13:42:45] 주기적 실행 설정이 업데이트되었습니다: {'batch_quantity': 11, 'selected_steps': ['1', '21', '22', '23', '31', '32', '33', '4', '51', '52', '53'], 'selected_accounts': ['onepick2019@gmail.com', 'wop31garam@gmail.com'], 'schedule_time': '13:43', 'step_interval': 30, 'chunk_sizes': {'1': 10, '21': 5, '22': 5, '23': 5, '31': 2, '32': 2, '33': 2, '4': 10, '51': 10, '52': 10, '53': 10}}
+[13:42:45] [2025-06-17 13:42:45] 주기적 실행이 시작되었습니다. 매일 13:43에 실행됩니다.
+[13:43:00] [2025-06-17 13:43:00] 배치 실행 시작: 수량=11, 단계=['1', '21', '22', '23', '31', '32', '33', '4', '51', '52', '53'], 계정=2개
+[13:43:00] [2025-06-17 13:43:00] 각 계정은 독립적인 프로세스에서 동시 실행됩니다.
+[13:43:00] [2025-06-17 13:43:00] 계정 onepick2019@gmail.com 처리 시작 (독립 프로세스)
+[13:43:00] [2025-06-17 13:43:00] 계정 onepick2019@gmail.com 독립 프로세스 시작됨
+[13:43:00] [2025-06-17 13:43:00] 다음 계정 실행까지 5초 대기...
+[13:43:00] [2025-06-17 13:43:00] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 10
+[13:43:00] [2025-06-17 13:43:00] 프로세스 PID 36716 시작됨 (계정 onepick2019@gmail.com, 단계 1)
+[13:43:00] [2025-06-17 13:43:00] 단계 1 타임아웃 설정: 3600초 (1시간 0분)
+[13:43:05] [2025-06-17 13:43:05] 계정 wop31garam@gmail.com 처리 시작 (독립 프로세스)
+[13:43:05] [2025-06-17 13:43:05] 계정 wop31garam@gmail.com 독립 프로세스 시작됨
+[13:43:05] [2025-06-17 13:43:05] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 1 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 10
+[13:43:05] [2025-06-17 13:43:05] 프로세스 PID 6300 시작됨 (계정 wop31garam@gmail.com, 단계 1)
+[13:43:05] [2025-06-17 13:43:05] 단계 1 타임아웃 설정: 3600초 (1시간 0분)
+[13:43:37] [2025-06-17 13:43:37] 단계 1 실행 성공 (계정 onepick2019@gmail.com, PID 36716)
+[13:43:37] [2025-06-17 13:43:37] 계정 onepick2019@gmail.com, 단계 1 완료
+[13:43:37] [2025-06-17 13:43:37] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:44:07] [2025-06-17 13:44:07] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 21 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 5
+[13:44:07] [2025-06-17 13:44:07] 프로세스 PID 40376 시작됨 (계정 onepick2019@gmail.com, 단계 21)
+[13:44:07] [2025-06-17 13:44:07] 단계 21 타임아웃 설정: 7200초 (2시간 0분)
+[13:44:08] [2025-06-17 13:44:08] 단계 21 실행 실패 (계정 onepick2019@gmail.com, PID 40376): 반환코드 2
+[13:44:08] [2025-06-17 13:44:08] 계정 onepick2019@gmail.com, 단계 21 실패
+[13:44:08] [2025-06-17 13:44:08] 계정 onepick2019@gmail.com, 단계 21: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:44:08] [2025-06-17 13:44:08] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:44:38] [2025-06-17 13:44:38] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 22 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 5
+[13:44:39] [2025-06-17 13:44:39] 프로세스 PID 16628 시작됨 (계정 onepick2019@gmail.com, 단계 22)
+[13:44:39] [2025-06-17 13:44:39] 단계 22 타임아웃 설정: 7200초 (2시간 0분)
+[13:44:40] [2025-06-17 13:44:40] 단계 22 실행 실패 (계정 onepick2019@gmail.com, PID 16628): 반환코드 2
+[13:44:40] [2025-06-17 13:44:40] 계정 onepick2019@gmail.com, 단계 22 실패
+[13:44:40] [2025-06-17 13:44:40] 계정 onepick2019@gmail.com, 단계 22: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:44:40] [2025-06-17 13:44:40] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:45:10] [2025-06-17 13:45:10] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 23 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 5
+[13:45:10] [2025-06-17 13:45:10] 프로세스 PID 27988 시작됨 (계정 onepick2019@gmail.com, 단계 23)
+[13:45:10] [2025-06-17 13:45:10] 단계 23 타임아웃 설정: 7200초 (2시간 0분)
+[13:45:11] [2025-06-17 13:45:11] 단계 23 실행 실패 (계정 onepick2019@gmail.com, PID 27988): 반환코드 2
+[13:45:11] [2025-06-17 13:45:11] 계정 onepick2019@gmail.com, 단계 23 실패
+[13:45:11] [2025-06-17 13:45:11] 계정 onepick2019@gmail.com, 단계 23: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:45:11] [2025-06-17 13:45:11] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:45:41] [2025-06-17 13:45:41] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 31 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 2
+[13:45:41] [2025-06-17 13:45:41] 프로세스 PID 20644 시작됨 (계정 onepick2019@gmail.com, 단계 31)
+[13:45:41] [2025-06-17 13:45:41] 단계 31 타임아웃 설정: 7200초 (2시간 0분)
+[13:45:42] [2025-06-17 13:45:42] 단계 31 실행 실패 (계정 onepick2019@gmail.com, PID 20644): 반환코드 2
+[13:45:42] [2025-06-17 13:45:42] 계정 onepick2019@gmail.com, 단계 31 실패
+[13:45:42] [2025-06-17 13:45:42] 계정 onepick2019@gmail.com, 단계 31: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:45:42] [2025-06-17 13:45:42] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:46:12] [2025-06-17 13:46:12] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 32 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 2
+[13:46:12] [2025-06-17 13:46:12] 프로세스 PID 25616 시작됨 (계정 onepick2019@gmail.com, 단계 32)
+[13:46:12] [2025-06-17 13:46:12] 단계 32 타임아웃 설정: 7200초 (2시간 0분)
+[13:46:13] [2025-06-17 13:46:13] 단계 32 실행 실패 (계정 onepick2019@gmail.com, PID 25616): 반환코드 2
+[13:46:13] [2025-06-17 13:46:13] 계정 onepick2019@gmail.com, 단계 32 실패
+[13:46:13] [2025-06-17 13:46:13] 계정 onepick2019@gmail.com, 단계 32: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:46:13] [2025-06-17 13:46:13] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:46:43] [2025-06-17 13:46:43] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 33 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 2
+[13:46:43] [2025-06-17 13:46:43] 프로세스 PID 5916 시작됨 (계정 onepick2019@gmail.com, 단계 33)
+[13:46:43] [2025-06-17 13:46:43] 단계 33 타임아웃 설정: 7200초 (2시간 0분)
+[13:46:44] [2025-06-17 13:46:44] 단계 33 실행 실패 (계정 onepick2019@gmail.com, PID 5916): 반환코드 2
+[13:46:44] [2025-06-17 13:46:44] 계정 onepick2019@gmail.com, 단계 33 실패
+[13:46:44] [2025-06-17 13:46:44] 계정 onepick2019@gmail.com, 단계 33: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:46:44] [2025-06-17 13:46:44] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:47:14] [2025-06-17 13:47:14] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 10
+[13:47:14] [2025-06-17 13:47:14] 프로세스 PID 45492 시작됨 (계정 onepick2019@gmail.com, 단계 4)
+[13:47:14] [2025-06-17 13:47:14] 단계 4 타임아웃 설정: 3600초 (1시간 0분)
+[13:47:34] [2025-06-17 13:47:34] 단계 4 실행 성공 (계정 onepick2019@gmail.com, PID 45492)
+[13:47:34] [2025-06-17 13:47:34] 계정 onepick2019@gmail.com, 단계 4 완료
+[13:47:34] [2025-06-17 13:47:34] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[13:48:04] [2025-06-17 13:48:04] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 10
+[13:48:04] [2025-06-17 13:48:04] 프로세스 PID 36232 시작됨 (계정 onepick2019@gmail.com, 단계 51)
+[13:48:04] [2025-06-17 13:48:04] 단계 51 타임아웃 설정: 3600초 (1시간 0분)
+[13:55:52] [2025-06-17 13:55:52] 단계 1 실행 성공 (계정 wop31garam@gmail.com, PID 6300)
+[13:55:52] [2025-06-17 13:55:52] 계정 wop31garam@gmail.com, 단계 1 완료
+[13:55:52] [2025-06-17 13:55:52] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[13:56:22] [2025-06-17 13:56:22] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 21 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 5
+[13:56:22] [2025-06-17 13:56:22] 프로세스 PID 31300 시작됨 (계정 wop31garam@gmail.com, 단계 21)
+[13:56:22] [2025-06-17 13:56:22] 단계 21 타임아웃 설정: 7200초 (2시간 0분)
+[13:56:23] [2025-06-17 13:56:23] 단계 21 실행 실패 (계정 wop31garam@gmail.com, PID 31300): 반환코드 2
+[13:56:23] [2025-06-17 13:56:23] 계정 wop31garam@gmail.com, 단계 21 실패
+[13:56:23] [2025-06-17 13:56:23] 계정 wop31garam@gmail.com, 단계 21: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:56:23] [2025-06-17 13:56:23] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[13:56:53] [2025-06-17 13:56:53] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 22 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 5
+[13:56:53] [2025-06-17 13:56:53] 프로세스 PID 14556 시작됨 (계정 wop31garam@gmail.com, 단계 22)
+[13:56:53] [2025-06-17 13:56:53] 단계 22 타임아웃 설정: 7200초 (2시간 0분)
+[13:56:54] [2025-06-17 13:56:54] 단계 22 실행 실패 (계정 wop31garam@gmail.com, PID 14556): 반환코드 2
+[13:56:54] [2025-06-17 13:56:54] 계정 wop31garam@gmail.com, 단계 22 실패
+[13:56:54] [2025-06-17 13:56:54] 계정 wop31garam@gmail.com, 단계 22: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:56:54] [2025-06-17 13:56:54] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[13:57:24] [2025-06-17 13:57:24] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 23 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 5
+[13:57:24] [2025-06-17 13:57:24] 프로세스 PID 42888 시작됨 (계정 wop31garam@gmail.com, 단계 23)
+[13:57:24] [2025-06-17 13:57:24] 단계 23 타임아웃 설정: 7200초 (2시간 0분)
+[13:57:25] [2025-06-17 13:57:25] 단계 23 실행 실패 (계정 wop31garam@gmail.com, PID 42888): 반환코드 2
+[13:57:25] [2025-06-17 13:57:25] 계정 wop31garam@gmail.com, 단계 23 실패
+[13:57:25] [2025-06-17 13:57:25] 계정 wop31garam@gmail.com, 단계 23: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:57:25] [2025-06-17 13:57:25] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[13:57:55] [2025-06-17 13:57:55] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 31 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 2
+[13:57:55] [2025-06-17 13:57:55] 프로세스 PID 31592 시작됨 (계정 wop31garam@gmail.com, 단계 31)
+[13:57:55] [2025-06-17 13:57:55] 단계 31 타임아웃 설정: 7200초 (2시간 0분)
+[13:57:56] [2025-06-17 13:57:56] 단계 31 실행 실패 (계정 wop31garam@gmail.com, PID 31592): 반환코드 2
+[13:57:56] [2025-06-17 13:57:56] 계정 wop31garam@gmail.com, 단계 31 실패
+[13:57:56] [2025-06-17 13:57:56] 계정 wop31garam@gmail.com, 단계 31: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:57:56] [2025-06-17 13:57:56] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[13:58:26] [2025-06-17 13:58:26] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 32 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 2
+[13:58:26] [2025-06-17 13:58:26] 프로세스 PID 32296 시작됨 (계정 wop31garam@gmail.com, 단계 32)
+[13:58:26] [2025-06-17 13:58:26] 단계 32 타임아웃 설정: 7200초 (2시간 0분)
+[13:58:27] [2025-06-17 13:58:27] 단계 32 실행 실패 (계정 wop31garam@gmail.com, PID 32296): 반환코드 2
+[13:58:27] [2025-06-17 13:58:27] 계정 wop31garam@gmail.com, 단계 32 실패
+[13:58:27] [2025-06-17 13:58:27] 계정 wop31garam@gmail.com, 단계 32: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:58:27] [2025-06-17 13:58:27] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[13:58:57] [2025-06-17 13:58:57] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 33 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 2
+[13:58:57] [2025-06-17 13:58:57] 프로세스 PID 46756 시작됨 (계정 wop31garam@gmail.com, 단계 33)
+[13:58:57] [2025-06-17 13:58:57] 단계 33 타임아웃 설정: 7200초 (2시간 0분)
+[13:58:58] [2025-06-17 13:58:58] 단계 33 실행 실패 (계정 wop31garam@gmail.com, PID 46756): 반환코드 2
+[13:58:58] [2025-06-17 13:58:58] 계정 wop31garam@gmail.com, 단계 33 실패
+[13:58:58] [2025-06-17 13:58:58] 계정 wop31garam@gmail.com, 단계 33: 타임아웃/실패했지만 후속 단계 계속 진행
+[13:58:58] [2025-06-17 13:58:58] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[13:59:28] [2025-06-17 13:59:28] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 4 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 10
+[13:59:29] [2025-06-17 13:59:29] 프로세스 PID 28428 시작됨 (계정 wop31garam@gmail.com, 단계 4)
+[13:59:29] [2025-06-17 13:59:29] 단계 4 타임아웃 설정: 3600초 (1시간 0분)
+[13:59:47] [2025-06-17 13:59:47] 단계 4 실행 성공 (계정 wop31garam@gmail.com, PID 28428)
+[13:59:47] [2025-06-17 13:59:47] 계정 wop31garam@gmail.com, 단계 4 완료
+[13:59:47] [2025-06-17 13:59:47] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[14:00:17] [2025-06-17 14:00:17] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 51 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 10
+[14:00:17] [2025-06-17 14:00:17] 프로세스 PID 36912 시작됨 (계정 wop31garam@gmail.com, 단계 51)
+[14:00:17] [2025-06-17 14:00:17] 단계 51 타임아웃 설정: 3600초 (1시간 0분)
+[14:16:33] [2025-06-17 14:16:33] 단계 51 실행 성공 (계정 onepick2019@gmail.com, PID 36232)
+[14:16:33] [2025-06-17 14:16:33] 계정 onepick2019@gmail.com, 단계 51 완료
+[14:16:33] [2025-06-17 14:16:33] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[14:17:03] [2025-06-17 14:17:03] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 52 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 10
+[14:17:03] [2025-06-17 14:17:03] 프로세스 PID 13400 시작됨 (계정 onepick2019@gmail.com, 단계 52)
+[14:17:03] [2025-06-17 14:17:03] 단계 52 타임아웃 설정: 3600초 (1시간 0분)
+[14:29:24] [2025-06-17 14:29:24] 단계 51 실행 성공 (계정 wop31garam@gmail.com, PID 36912)
+[14:29:24] [2025-06-17 14:29:24] 계정 wop31garam@gmail.com, 단계 51 완료
+[14:29:24] [2025-06-17 14:29:24] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[14:29:54] [2025-06-17 14:29:54] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 52 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 10
+[14:29:54] [2025-06-17 14:29:54] 프로세스 PID 34128 시작됨 (계정 wop31garam@gmail.com, 단계 52)
+[14:29:54] [2025-06-17 14:29:54] 단계 52 타임아웃 설정: 3600초 (1시간 0분)
+[14:29:55] [2025-06-17 14:29:55] 단계 52 실행 실패 (계정 wop31garam@gmail.com, PID 34128): 반환코드 1
+[14:29:55] [2025-06-17 14:29:55] 계정 wop31garam@gmail.com, 단계 52 실패
+[14:29:55] [2025-06-17 14:29:55] 계정 wop31garam@gmail.com: 다음 단계까지 30초 대기...
+[14:30:25] [2025-06-17 14:30:25] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 53 --accounts wop31garam@gmail.com --quantity 11 --chunk-size 10
+[14:30:25] [2025-06-17 14:30:25] 프로세스 PID 25996 시작됨 (계정 wop31garam@gmail.com, 단계 53)
+[14:30:25] [2025-06-17 14:30:25] 단계 53 타임아웃 설정: 3600초 (1시간 0분)
+[14:30:25] [2025-06-17 14:30:25] 단계 53 실행 실패 (계정 wop31garam@gmail.com, PID 25996): 반환코드 1
+[14:30:25] [2025-06-17 14:30:25] 계정 wop31garam@gmail.com, 단계 53 실패
+[14:30:25] [2025-06-17 14:30:25] 계정 wop31garam@gmail.com 처리 완료 (실패)
+[14:50:39] [2025-06-17 14:50:39] 단계 52 실행 성공 (계정 onepick2019@gmail.com, PID 13400)
+[14:50:39] [2025-06-17 14:50:39] 계정 onepick2019@gmail.com, 단계 52 완료
+[14:50:39] [2025-06-17 14:50:39] 계정 onepick2019@gmail.com: 다음 단계까지 30초 대기...
+[14:51:09] [2025-06-17 14:51:09] 실행 명령: C:\Users\drmath7\AppData\Local\Programs\Python\Python313\python.exe c:\Projects\percenty_project\cli\batch_cli.py single --step 53 --accounts onepick2019@gmail.com --quantity 11 --chunk-size 10
+[14:51:09] [2025-06-17 14:51:09] 프로세스 PID 26260 시작됨 (계정 onepick2019@gmail.com, 단계 53)
+[14:51:10] [2025-06-17 14:51:10] 단계 53 타임아웃 설정: 3600초 (1시간 0분)
+[15:23:38] [2025-06-17 15:23:38] 단계 53 실행 성공 (계정 onepick2019@gmail.com, PID 26260)
+[15:23:38] [2025-06-17 15:23:38] 계정 onepick2019@gmail.com, 단계 53 완료
+[15:23:38] [2025-06-17 15:23:38] 계정 onepick2019@gmail.com 처리 완료 (성공)
+[15:23:38] [2025-06-17 15:23:38] 모든 계정 처리 완료: 성공 1/2
+
