@@ -66,3 +66,6 @@ debug_*.py
 
 # JSON config files (if they contain sensitive data)
 # *.json
+
+# Git automation scripts are now in /git folder
+# Keep git folder in version control for team collaboration
