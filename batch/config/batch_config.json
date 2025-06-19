@@ -1,0 +1,117 @@
+{
+  "batch": {
+    "max_workers": 4,
+    "default_quantity": 100,
+    "retry_count": 3,
+    "delay_between_tasks": 1.0,
+    "delay_between_accounts": 2.0,
+    "delay_between_steps": 5.0
+  },
+  "browser": {
+    "headless": false,
+    "window_size": [1920, 1080],
+    "timeout": 30,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "enable_images": true,
+    "enable_javascript": true
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/batch_manager.log",
+    "max_file_size": "10MB",
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "steps": {
+    "step1": {
+      "default_quantity": 100,
+      "max_quantity": 500,
+      "timeout": 300,
+      "retry_on_failure": true
+    },
+    "step2": {
+      "default_quantity": 50,
+      "max_quantity": 200,
+      "timeout": 600,
+      "retry_on_failure": true
+    },
+    "step3": {
+      "default_quantity": 30,
+      "max_quantity": 100,
+      "timeout": 900,
+      "retry_on_failure": true
+    },
+    "step4": {
+      "default_quantity": 20,
+      "max_quantity": 50,
+      "timeout": 1200,
+      "retry_on_failure": true
+    },
+    "step5": {
+      "default_quantity": 15,
+      "max_quantity": 30,
+      "timeout": 1500,
+      "retry_on_failure": true
+    },
+    "step6": {
+      "default_quantity": 10,
+      "max_quantity": 20,
+      "timeout": 1800,
+      "retry_on_failure": true
+    }
+  },
+  "scenarios": {
+    "full_pipeline_single": {
+      "description": "단일 계정으로 전체 파이프라인 실행",
+      "steps": [1, 2, 3, 4, 5, 6],
+      "concurrent": false,
+      "quantity": 50
+    },
+    "step1_multi_account": {
+      "description": "여러 계정으로 Step1만 실행",
+      "steps": [1],
+      "concurrent": true,
+      "quantity": 100
+    },
+    "test_run": {
+      "description": "테스트 실행 (소량)",
+      "steps": [1],
+      "concurrent": false,
+      "quantity": 5
+    },
+    "bulk_processing": {
+      "description": "대량 처리 (Step1-3)",
+      "steps": [1, 2, 3],
+      "concurrent": true,
+      "quantity": 200
+    }
+  },
+  "scheduling": {
+    "enabled": false,
+    "timezone": "Asia/Seoul",
+    "daily_runs": [],
+    "weekly_runs": [],
+    "monthly_runs": []
+  },
+  "monitoring": {
+    "progress_update_interval": 10,
+    "save_results": true,
+    "results_directory": "results",
+    "screenshot_on_error": true,
+    "detailed_logging": false
+  },
+  "error_handling": {
+    "continue_on_error": true,
+    "max_consecutive_failures": 5,
+    "notification_on_failure": false,
+    "auto_restart_on_crash": false,
+    "error_screenshot": true
+  },
+  "performance": {
+    "memory_limit_mb": 2048,
+    "cpu_limit_percent": 80,
+    "disk_space_check": true,
+    "min_free_space_gb": 1,
+    "cleanup_temp_files": true
+  }
+}
