@@ -24,8 +24,9 @@ from percenty_utils import hide_channel_talk_and_modals, periodic_ui_cleanup, en
 # 새 탭에서의 로그인 모달창 숨기기 필요할 경우에만 사용
 from login_modal_utils import apply_login_modal_hiding_for_new_tab
 
-# 드롭다운 유틸리티 임포트
-from dropdown_utils2 import get_product_search_dropdown_manager
+# 최적화된 드롭다운 유틸리티 임포트
+from dropdown_utils_common import get_common_dropdown_utils
+from dropdown_utils2 import get_product_search_dropdown_manager  # 호환성 유지
 
 # UI 요소 임포트
 from ui_elements import UI_ELEMENTS
@@ -61,7 +62,7 @@ logger = logging.getLogger(__name__)
 class PercentyNewStep2Server2:
     def __init__(self, driver, browser_ui_height=95):
         """
-        퍼센티 상품 수정 자동화 스크립트 2단계 초기화 - 서버2 전용
+        퍼센티 상품 수정 자동화 스크립트 2단계 초기화 - 서버2 전용 (최적화됨)
         
         Args:
             driver: 셀레니움 웹드라이버 인스턴스
@@ -70,15 +71,27 @@ class PercentyNewStep2Server2:
         self.driver = driver
         self.browser_ui_height = browser_ui_height
         self.server_name = "서버2"  # 서버2 전용 설정
-        logger.info(f"===== 퍼센티 상품 수정 자동화 스크립트 2단계 초기화 - {self.server_name} 전용 =====")
+        logger.info(f"===== 퍼센티 상품 수정 자동화 스크립트 2단계 초기화 - {self.server_name} 전용 (최적화됨) =====")
         
         # 브라우저 내부 크기 확인
         self.inner_width = self.driver.execute_script("return window.innerWidth")
         self.inner_height = self.driver.execute_script("return window.innerHeight")
         logger.info(f"브라우저 내부 크기: {self.inner_width}x{self.inner_height}")
         
-        # 2단계 전용 드롭다운 관리자 초기화
+        # 최적화된 공통 드롭다운 유틸리티 초기화
+        self.dropdown_utils = get_common_dropdown_utils(driver)
+        # 기존 호환성 유지
         self.dropdown_manager = get_product_search_dropdown_manager(driver)
+        
+        # 성능 모니터링 초기화
+        self.performance_metrics = {
+            'dropdown_operations': [],
+            'product_moves': [],
+            'group_selections': [],
+            'page_loads': []
+        }
+        
+        logger.info("최적화된 드롭다운 유틸리티 및 성능 모니터링 초기화 완료")
 
     def convert_coordinates(self, x, y):
         """

@@ -21,6 +21,9 @@ from account_manager import AccountManager
 # Step 3 코어 기능 임포트
 from product_editor_core3 import ProductEditorCore3
 
+# 최적화된 공통 드롭다운 유틸리티 임포트
+from dropdown_utils_common import CommonDropdownUtils
+
 # 로그인 기능 임포트
 from login_percenty import PercentyLogin
 
@@ -72,6 +75,15 @@ class PercentyNewStep3:
         self.driver = None
         self.browser_core = None
         self.current_account_id = None
+        self.common_dropdown = None
+        
+        # 성능 메트릭 초기화
+        self.performance_metrics = {
+            'total_operations': 0,
+            'successful_operations': 0,
+            'navigation_time': [],
+            'core_processing_time': []
+        }
         
     def setup_browser(self):
         """브라우저 설정 및 초기화"""
@@ -83,6 +95,10 @@ class PercentyNewStep3:
                 return False
             
             self.driver = login_handler.driver
+            
+            # 공통 드롭다운 유틸리티 초기화
+            self.common_dropdown = CommonDropdownUtils(self.driver)
+            
             logging.info("브라우저 설정 완료")
             return True
             
@@ -213,92 +229,185 @@ class PercentyNewStep3:
             return False
     
     def _change_to_new_collection(self):
-        """신규수집 그룹으로 변경"""
+        """신규수집 그룹으로 변경 (최적화된 버전)"""
+        start_time = time.time()
+        
         try:
-            logging.info("신규수집 그룹으로 변경 시작")
+            logging.info("신규수집 그룹으로 변경 시작 (최적화된 방식)")
             
-            from dropdown_utils2 import ProductSearchDropdownManager
+            # 최적화된 그룹 선택 시도
+            success = self.common_dropdown.select_group_with_verification(
+                "신규수집", 
+                timeout=5  # 5초 타임아웃
+            )
             
-            # ProductSearchDropdownManager 사용
-            dropdown_manager = ProductSearchDropdownManager(self.driver)
+            duration = time.time() - start_time
             
-            # 신규수집 그룹 선택 시도 (최대 3회 재시도)
-            for attempt in range(3):
-                try:
-                    logging.info(f"신규수집 그룹 선택 시도 {attempt + 1}/3")
-                    
-                    # 상품검색용 드롭박스에서 신규수집 그룹 선택 (통합 메서드 사용)
-                    if dropdown_manager.select_group_in_search_dropdown("신규수집"):
-                        logging.info("신규수집 그룹 선택 성공")
+            if success:
+                logging.info(f"신규수집 그룹 선택 성공 (최적화: {duration:.2f}초)")
+                self._track_performance("그룹 선택 (최적화)", duration, True)
+                self.performance_metrics['navigation_time'].append(duration)
+                return True
+            else:
+                logging.warning(f"최적화된 그룹 선택 실패, 기존 방식으로 폴백 (소요시간: {duration:.2f}초)")
+                self._track_performance("그룹 선택 (최적화)", duration, False)
+                
+                # 기존 방식으로 폴백
+                fallback_start = time.time()
+                
+                from dropdown_utils2 import ProductSearchDropdownManager
+                dropdown_manager = ProductSearchDropdownManager(self.driver)
+                
+                # 기존 방식으로 재시도
+                for attempt in range(3):
+                    try:
+                        logging.info(f"기존 방식 그룹 선택 시도 {attempt + 1}/3")
                         
-                        # 상품 목록 자동 로딩 대기
-                        if dropdown_manager.verify_page_refresh():
-                            logging.info("상품 목록 자동 로딩 완료")
-                            return True
-                        else:
-                            logging.warning("상품 목록 로딩 확인 실패")
-                    else:
-                        logging.warning(f"신규수집 그룹 선택 실패 (시도 {attempt + 1}/3)")
-                    
-                    # 재시도 전 잠시 대기
-                    if attempt < 2:  # 마지막 시도가 아닌 경우만
-                        time.sleep(2)
+                        if dropdown_manager.select_group_in_search_dropdown("신규수집"):
+                            if dropdown_manager.verify_page_refresh():
+                                fallback_duration = time.time() - fallback_start
+                                logging.info(f"기존 방식으로 그룹 선택 성공 ({fallback_duration:.2f}초)")
+                                self._track_performance("그룹 선택 (폴백)", fallback_duration, True)
+                                return True
                         
-                except Exception as e:
-                    logging.error(f"신규수집 그룹 선택 중 오류 (시도 {attempt + 1}/3): {e}")
-                    if attempt < 2:  # 마지막 시도가 아닌 경우만
-                        time.sleep(2)
-            
-            logging.warning("신규수집 그룹 변경 실패 - 기본값 유지")
-            return True  # 실패해도 계속 진행
+                        if attempt < 2:
+                            time.sleep(2)
+                            
+                    except Exception as e:
+                        logging.error(f"기존 방식 그룹 선택 중 오류 (시도 {attempt + 1}/3): {e}")
+                        if attempt < 2:
+                            time.sleep(2)
+                
+                fallback_duration = time.time() - fallback_start
+                self._track_performance("그룹 선택 (폴백)", fallback_duration, False)
+                logging.warning("모든 그룹 선택 방식 실패 - 기본값 유지")
+                return True  # 실패해도 계속 진행
             
         except Exception as e:
+            duration = time.time() - start_time
             logging.error(f"신규수집 그룹 변경 중 오류: {e}")
+            self._track_performance("그룹 선택 (오류)", duration, False)
             return True  # 실패해도 계속 진행
     
     def _set_items_per_page(self, count=50):
-        """페이지당 아이템 수 설정"""
+        """페이지당 아이템 수 설정 (최적화된 버전)"""
+        start_time = time.time()
+        
         try:
-            logging.info(f"페이지당 {count}개 보기 설정 시작")
+            logging.info(f"페이지당 {count}개 보기 설정 시작 (최적화된 방식)")
             
-            from dropdown_utils2 import ProductSearchDropdownManager
+            # 최적화된 페이지당 아이템 수 설정 시도
+            success = self.common_dropdown.select_items_per_page_with_verification(
+                str(count), 
+                timeout=3  # 3초 타임아웃
+            )
             
-            # ProductSearchDropdownManager 사용
-            dropdown_manager = ProductSearchDropdownManager(self.driver)
+            duration = time.time() - start_time
             
-            # 페이지 크기 설정 시도 (최대 3회 재시도)
-            for attempt in range(3):
-                try:
-                    logging.info(f"페이지 크기 설정 시도 {attempt + 1}/3")
-                    
-                    # 페이지 크기 드롭박스에서 지정된 개수 선택
-                    if dropdown_manager.select_items_per_page(str(count)):
-                        logging.info(f"페이지당 {count}개 보기 설정 성공")
+            if success:
+                logging.info(f"페이지당 {count}개 보기 설정 성공 (최적화: {duration:.2f}초)")
+                self._track_performance("페이지당 아이템 설정 (최적화)", duration, True)
+                self.performance_metrics['navigation_time'].append(duration)
+                return True
+            else:
+                logging.warning(f"최적화된 페이지당 아이템 설정 실패, 기존 방식으로 폴백 (소요시간: {duration:.2f}초)")
+                self._track_performance("페이지당 아이템 설정 (최적화)", duration, False)
+                
+                # 기존 방식으로 폴백
+                fallback_start = time.time()
+                
+                from dropdown_utils2 import ProductSearchDropdownManager
+                dropdown_manager = ProductSearchDropdownManager(self.driver)
+                
+                # 기존 방식으로 재시도
+                for attempt in range(3):
+                    try:
+                        logging.info(f"기존 방식 페이지당 아이템 설정 시도 {attempt + 1}/3")
                         
-                        # 상품 목록 자동 로딩 대기
-                        if dropdown_manager.verify_page_refresh():
-                            logging.info("상품 목록 자동 로딩 완료")
-                            return True
-                        else:
-                            logging.warning("상품 목록 로딩 확인 실패")
-                    else:
-                        logging.warning(f"페이지 크기 설정 실패 (시도 {attempt + 1}/3)")
-                    
-                    # 재시도 전 잠시 대기
-                    if attempt < 2:  # 마지막 시도가 아닌 경우만
-                        time.sleep(2)
+                        if dropdown_manager.select_items_per_page(str(count)):
+                            if dropdown_manager.verify_page_refresh():
+                                fallback_duration = time.time() - fallback_start
+                                logging.info(f"기존 방식으로 페이지당 아이템 설정 성공 ({fallback_duration:.2f}초)")
+                                self._track_performance("페이지당 아이템 설정 (폴백)", fallback_duration, True)
+                                return True
                         
-                except Exception as e:
-                    logging.error(f"페이지 크기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
-                    if attempt < 2:  # 마지막 시도가 아닌 경우만
-                        time.sleep(2)
-            
-            logging.warning("페이지당 아이템 수 설정 실패 - 기본값 유지")
-            return True  # 실패해도 계속 진행
+                        if attempt < 2:
+                            time.sleep(2)
+                            
+                    except Exception as e:
+                        logging.error(f"기존 방식 페이지당 아이템 설정 중 오류 (시도 {attempt + 1}/3): {e}")
+                        if attempt < 2:
+                            time.sleep(2)
+                
+                fallback_duration = time.time() - fallback_start
+                self._track_performance("페이지당 아이템 설정 (폴백)", fallback_duration, False)
+                logging.warning("모든 페이지당 아이템 설정 방식 실패 - 기본값 유지")
+                return True  # 실패해도 계속 진행
             
         except Exception as e:
+            duration = time.time() - start_time
             logging.error(f"페이지당 아이템 수 설정 중 오류: {e}")
+            self._track_performance("페이지당 아이템 설정 (오류)", duration, False)
             return True  # 실패해도 계속 진행
+    
+    def _track_performance(self, operation_name, duration, success=True):
+        """
+        성능 추적 헬퍼 메서드
+        
+        Args:
+            operation_name: 작업 이름
+            duration: 소요 시간 (초)
+            success: 성공 여부
+        """
+        self.performance_metrics['total_operations'] += 1
+        if success:
+            self.performance_metrics['successful_operations'] += 1
+        
+        logging.info(f"[성능] {operation_name}: {duration:.2f}초 ({'성공' if success else '실패'})")
+    
+    def get_performance_summary(self):
+        """
+        성능 요약 정보 반환
+        
+        Returns:
+            dict: 성능 요약 정보
+        """
+        metrics = self.performance_metrics
+        
+        summary = {
+            'total_operations': metrics['total_operations'],
+            'successful_operations': metrics['successful_operations'],
+            'success_rate': (metrics['successful_operations'] / max(metrics['total_operations'], 1)) * 100
+        }
+        
+        if metrics['navigation_time']:
+            summary['avg_navigation_time'] = sum(metrics['navigation_time']) / len(metrics['navigation_time'])
+            summary['total_navigation_operations'] = len(metrics['navigation_time'])
+        
+        if metrics['core_processing_time']:
+            summary['avg_core_processing_time'] = sum(metrics['core_processing_time']) / len(metrics['core_processing_time'])
+            summary['total_core_operations'] = len(metrics['core_processing_time'])
+        
+        return summary
+    
+    def log_performance_summary(self):
+        """
+        성능 요약 로깅
+        """
+        summary = self.get_performance_summary()
+        
+        logging.info("===== Step 3 성능 요약 =====")
+        logging.info(f"총 작업 수: {summary['total_operations']}")
+        logging.info(f"성공한 작업 수: {summary['successful_operations']}")
+        logging.info(f"성공률: {summary['success_rate']:.1f}%")
+        
+        if 'avg_navigation_time' in summary:
+            logging.info(f"평균 네비게이션 시간: {summary['avg_navigation_time']:.2f}초 ({summary['total_navigation_operations']}회)")
+        
+        if 'avg_core_processing_time' in summary:
+            logging.info(f"평균 코어 처리 시간: {summary['avg_core_processing_time']:.2f}초 ({summary['total_core_operations']}회)")
+        
+        logging.info("=========================")
     
     def _scroll_to_top(self):
         """맨 위로 스크롤"""

@@ -26,8 +26,8 @@ from percenty_utils import hide_channel_talk_and_modals, periodic_ui_cleanup, en
 # 새 탭에서의 로그인 모달창 숨기기 필요할 경우에만 사용
 from login_modal_utils import apply_login_modal_hiding_for_new_tab
 
-# 드롭다운 유틸리티 임포트
-from dropdown_utils import get_dropdown_manager
+# 통합 드롭다운 관리자 임포트 (스크롤 방식)
+from dropdown_manager_unified import get_dropdown_manager
 
 # 상품 편집 코어 기능 임포트
 from product_editor_core import ProductEditorCore
