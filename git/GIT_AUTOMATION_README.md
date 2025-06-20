@@ -31,7 +31,7 @@ Percenty 프로젝트의 Git 작업을 자동화하기 위한 스크립트들입
 
 ### Windows에서 배치파일 실행
 ```cmd
-C:\Projects\percenty_project> git\git_commit_all.bat
+C:\Projects\percenty_project> ./git\git_commit_all.bat
 ========================================
 Percenty Project Git Commit Script
 ========================================

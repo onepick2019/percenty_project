@@ -428,7 +428,7 @@ class PeriodicExecutionManager:
                 # 청크별 타임아웃 계산
                 timeout = self._calculate_chunk_timeout(step, quantity, chunk_size)
                 
-                self._log(f"단계 {step} 청크별 타임아웃 설정: {timeout}초 ({timeout//3600}시간 {(timeout%3600)//60}분) - 수량: {quantity}, 청크크기: {chunk_size}")
+                self._log(f"단계 {step} 전체 배치 타임아웃 설정: {timeout}초 ({timeout//3600}시간 {(timeout%3600)//60}분) - 총수량: {quantity}, 청크크기: {chunk_size}, 예상청크수: {(quantity + chunk_size - 1) // chunk_size}")
                 
                 # 프로세스 완료 대기 (스텝별 타임아웃)
                 process.wait(timeout=timeout)
@@ -446,14 +446,23 @@ class PeriodicExecutionManager:
                     return False
                     
             except subprocess.TimeoutExpired:
-                # 타임아웃 시 프로세스 종료
-                self._log(f"단계 {step} 실행 타임아웃 (계정 {account_id}, PID {process.pid}) - 프로세스 종료 중...")
+                # 타임아웃 시 프로세스 및 관련 리소스 완전 정리
+                self._log(f"단계 {step} 실행 타임아웃 (계정 {account_id}, PID {process.pid}) - 프로세스 및 브라우저 정리 중...")
+                
+                # 1단계: 정상 종료 시도
                 process.terminate()
                 try:
-                    process.wait(timeout=5)
+                    process.wait(timeout=10)
+                    self._log(f"프로세스 {process.pid} 정상 종료 완료")
                 except subprocess.TimeoutExpired:
+                    # 2단계: 강제 종료
+                    self._log(f"프로세스 {process.pid} 정상 종료 실패, 강제 종료 시도")
                     process.kill()
                     process.wait()
+                    self._log(f"프로세스 {process.pid} 강제 종료 완료")
+                
+                # 3단계: 관련 브라우저 프로세스 정리
+                self._cleanup_browser_processes(account_id)
                 
                 # 타임아웃된 프로세스를 목록에서 제거
                 with self.process_lock:
@@ -466,7 +475,7 @@ class PeriodicExecutionManager:
             return False
     
     def _calculate_chunk_timeout(self, step: str, quantity: int, chunk_size: int) -> int:
-        """청크별 타임아웃 계산
+        """전체 배치 타임아웃 계산 (청크별이 아닌 전체 프로세스 기준)
         
         Args:
             step: 실행 단계
@@ -497,22 +506,97 @@ class PeriodicExecutionManager:
         # 단일 아이템 처리 시간
         base_time_per_item = base_timeouts_per_item.get(step, 90)  # 기본 1.5분/아이템
         
-        # 청크별 타임아웃 계산 (청크 크기 * 아이템당 시간 + 오버헤드)
-        chunk_timeout = chunk_size * base_time_per_item
+        # 전체 배치 타임아웃 계산 (총 수량 * 아이템당 시간 + 청크별 오버헤드)
+        total_timeout = quantity * base_time_per_item
         
-        # 브라우저 재시작 및 초기화 오버헤드 추가 (청크당 5분)
-        overhead = 300
-        chunk_timeout += overhead
+        # 청크별 브라우저 재시작 오버헤드 추가 (청크당 5분)
+        chunk_overhead = total_chunks * 300
+        total_timeout += chunk_overhead
         
-        # 최소 타임아웃 보장 (10분)
-        min_timeout = 600
-        chunk_timeout = max(chunk_timeout, min_timeout)
+        # 최소 타임아웃 보장 (20분)
+        min_timeout = 1200
+        total_timeout = max(total_timeout, min_timeout)
         
-        # 최대 타임아웃 제한 (2시간)
-        max_timeout = 7200
-        chunk_timeout = min(chunk_timeout, max_timeout)
+        # 최대 타임아웃 제한 (6시간)
+        max_timeout = 21600
+        total_timeout = min(total_timeout, max_timeout)
         
-        return chunk_timeout
+        return total_timeout
+    
+    def _cleanup_browser_processes(self, account_id: str):
+        """타임아웃 시 관련 브라우저 프로세스 정리
+        
+        Args:
+            account_id: 계정 ID
+        """
+        try:
+            import psutil
+            import time
+            
+            self._log(f"계정 {account_id} 관련 브라우저 프로세스 정리 시작")
+            
+            # Chrome/Edge 프로세스 찾기 및 종료
+            browser_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and ('chrome' in proc.info['name'].lower() or 'msedge' in proc.info['name'].lower()):
+                        cmdline = proc.info['cmdline'] or []
+                        # 사용자 데이터 디렉토리에 계정 ID가 포함된 프로세스 찾기
+                        if any(account_id in arg for arg in cmdline if arg):
+                            browser_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+            
+            # 브라우저 프로세스 종료
+            for proc in browser_processes:
+                try:
+                    self._log(f"브라우저 프로세스 종료 시도: PID {proc.pid}")
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                    self._log(f"브라우저 프로세스 {proc.pid} 정상 종료")
+                except psutil.TimeoutExpired:
+                    try:
+                        proc.kill()
+                        self._log(f"브라우저 프로세스 {proc.pid} 강제 종료")
+                    except:
+                        pass
+                except Exception as e:
+                    self._log(f"브라우저 프로세스 {proc.pid} 종료 중 오류: {e}")
+            
+            # Python 프로세스 정리 (batch_cli.py 관련)
+            python_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'python' in proc.info['name'].lower():
+                        cmdline = proc.info['cmdline'] or []
+                        # batch_cli.py를 실행하고 해당 계정을 처리하는 프로세스 찾기
+                        if any('batch_cli.py' in arg for arg in cmdline) and any(account_id in arg for arg in cmdline):
+                            python_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+            
+            # Python 프로세스 종료
+            for proc in python_processes:
+                try:
+                    self._log(f"Python 프로세스 종료 시도: PID {proc.pid}")
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                    self._log(f"Python 프로세스 {proc.pid} 정상 종료")
+                except psutil.TimeoutExpired:
+                    try:
+                        proc.kill()
+                        self._log(f"Python 프로세스 {proc.pid} 강제 종료")
+                    except:
+                        pass
+                except Exception as e:
+                    self._log(f"Python 프로세스 {proc.pid} 종료 중 오류: {e}")
+            
+            self._log(f"계정 {account_id} 브라우저 프로세스 정리 완료")
+            
+        except ImportError:
+            self._log("psutil 라이브러리가 없어 브라우저 프로세스 정리를 건너뜁니다")
+        except Exception as e:
+            self._log(f"브라우저 프로세스 정리 중 오류: {e}")
     
     def _log(self, message: str):
         """로그 메시지 출력"""
