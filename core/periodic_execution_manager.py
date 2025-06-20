@@ -156,11 +156,12 @@ class PeriodicExecutionManager:
         
         Args:
             config: {
-                'batch_quantity': int,
+                'step1_quantity': int,      # 1단계 전용 배치 수량
+                'other_quantity': int,      # 나머지 단계 공통 배치 수량
                 'selected_steps': List[str],
                 'selected_accounts': List[str],
-                'schedule_time': str,  # "HH:MM" 형식
-                'step_interval': int   # 단계 간 대기 시간(초)
+                'schedule_time': str,       # "HH:MM" 형식
+                'step_interval': int        # 단계 간 대기 시간(초)
             }
         """
         self.config = config.copy()
@@ -272,12 +273,14 @@ class PeriodicExecutionManager:
         self.is_executing = True
         
         try:
-            batch_quantity = self.config.get('batch_quantity', 100)
+            # 단계별 배치수량 설정
+            step1_quantity = self.config.get('step1_quantity', 300)
+            other_quantity = self.config.get('other_quantity', 100)
             selected_steps = self.config.get('selected_steps', [])
             selected_accounts = self.config.get('selected_accounts', [])
-            step_interval = self.config.get('step_interval', 15)
+            step_interval = self.config.get('step_interval', 10)
             
-            self._log(f"배치 실행 시작: 수량={batch_quantity}, 단계={selected_steps}, 계정={len(selected_accounts)}개")
+            self._log(f"배치 실행 시작: 1단계={step1_quantity}개, 나머지단계={other_quantity}개, 단계={selected_steps}, 계정={len(selected_accounts)}개")
             self._log(f"각 계정은 독립적인 프로세스에서 동시 실행됩니다.")
             
             # 각 계정을 별도 스레드에서 동시 실행
@@ -301,7 +304,9 @@ class PeriodicExecutionManager:
                             results[account_id] = False
                             return
                         
-                        success = self._execute_single_step(account_id, step, batch_quantity)
+                        # 단계에 따라 배치수량 결정
+                        current_batch_quantity = step1_quantity if step == '1' else other_quantity
+                        success = self._execute_single_step(account_id, step, current_batch_quantity)
                         
                         if success:
                             self._log(f"계정 {account_id}, 단계 {step} 완료")
@@ -471,7 +476,7 @@ class PeriodicExecutionManager:
         Returns:
             int: 계산된 타임아웃 (초)
         """
-        # 단계별 기본 타임아웃 (단일 아이템 처리 시간 기준)
+        # 단계별 기본 타임아웃 (단일 아이템 처리 시간 기준) - 휴먼딜레이 반영
         base_timeouts_per_item = {
             '21': 270,   # 4.5분/아이템 (서버 처리 단계)
             '22': 270,   # 4.5분/아이템 (서버 처리 단계)
@@ -479,11 +484,11 @@ class PeriodicExecutionManager:
             '31': 540,   # 9분/아이템 (키워드 검색으로 시간 편차 큼)
             '32': 540,   # 9분/아이템 (키워드 검색으로 시간 편차 큼)
             '33': 540,   # 9분/아이템 (키워드 검색으로 시간 편차 큼)
-            '1': 135,    # 2.25분/아이템 (초기 데이터 처리)
-            '4': 135,    # 2.25분/아이템 (번역 처리)
-            '51': 135,   # 2.25분/아이템 (최종 처리 단계)
-            '52': 135,   # 2.25분/아이템 (최종 처리 단계)
-            '53': 135    # 2.25분/아이템 (최종 처리 단계)
+            '1': 195,    # 3.25분/아이템 (초기 데이터 처리 + 휴먼딜레이 45-60초)
+            '4': 135,    # 2.25분/아이템 (번역 처리, 휴먼딜레이 미적용)
+            '51': 285,   # 4.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-160초)
+            '52': 315,   # 5.25분/아이템 (최종 처리 단계 + 휴먼딜레이 152-170초)
+            '53': 345    # 5.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-180초)
         }
         
         # 청크 수 계산

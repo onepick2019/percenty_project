@@ -164,7 +164,7 @@ class PercentyAdvancedGUI:
         
         # 단계 선택 (체크박스) - 1-6단계 지원 (2단계는 21, 22, 23으로, 3단계는 31, 32, 33으로, 5단계는 51, 52, 53으로 분리)
         self.step_vars = {}
-        steps = ['1', '21', '22', '23', '31', '32', '33', '4', '51', '52', '53', '6']
+        steps = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
         for step in steps:
             self.step_vars[step] = tk.BooleanVar(value=False)  # 기본적으로 아무것도 선택하지 않음
         
@@ -316,20 +316,45 @@ class PercentyAdvancedGUI:
         batch_frame = ttk.LabelFrame(periodic_frame, text="배치 수량 설정", padding=5)
         batch_frame.pack(fill=tk.X, pady=(0, 5))
         
-        # 배치 수량 입력
-        quantity_frame = ttk.Frame(batch_frame)
-        quantity_frame.pack(fill=tk.X, pady=5)
+        # 배치 수량 설정 (1단계 전용 + 나머지 단계 공통)
+        quantity_main_frame = ttk.LabelFrame(periodic_frame, text="배치 수량 설정", padding=10)
+        quantity_main_frame.pack(fill=tk.X, pady=(0, 15))
         
-        ttk.Label(quantity_frame, text="배치 수량:").pack(side=tk.LEFT, padx=(0, 10))
+        # 1단계 전용 배치 수량
+        step1_quantity_frame = ttk.Frame(quantity_main_frame)
+        step1_quantity_frame.pack(fill=tk.X, pady=5)
         
-        # 배치 수량 변수 초기화 (아직 없다면)
-        if not hasattr(self, 'periodic_quantity_var'):
-            self.periodic_quantity_var = tk.StringVar(value="100")
+        ttk.Label(step1_quantity_frame, text="1단계 전용 배치 수량:").pack(side=tk.LEFT, padx=(0, 10))
         
-        quantity_entry = ttk.Entry(quantity_frame, textvariable=self.periodic_quantity_var, width=10)
-        quantity_entry.pack(side=tk.LEFT, padx=(0, 10))
+        # 1단계 전용 배치 수량 변수 초기화
+        if not hasattr(self, 'periodic_step1_quantity_var'):
+            self.periodic_step1_quantity_var = tk.StringVar(value="500")
         
-        ttk.Label(quantity_frame, text="개 (숫자만 입력)", foreground="gray").pack(side=tk.LEFT)
+        step1_quantity_entry = ttk.Entry(step1_quantity_frame, textvariable=self.periodic_step1_quantity_var, width=10)
+        step1_quantity_entry.pack(side=tk.LEFT, padx=(0, 10))
+        
+        ttk.Label(step1_quantity_frame, text="개 (1단계에만 적용)", foreground="blue").pack(side=tk.LEFT)
+        
+        # 나머지 단계 공통 배치 수량
+        other_quantity_frame = ttk.Frame(quantity_main_frame)
+        other_quantity_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(other_quantity_frame, text="나머지 단계 공통 배치 수량:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 나머지 단계 공통 배치 수량 변수 초기화
+        if not hasattr(self, 'periodic_other_quantity_var'):
+            self.periodic_other_quantity_var = tk.StringVar(value="100")
+        
+        other_quantity_entry = ttk.Entry(other_quantity_frame, textvariable=self.periodic_other_quantity_var, width=10)
+        other_quantity_entry.pack(side=tk.LEFT, padx=(0, 10))
+        
+        ttk.Label(other_quantity_frame, text="개 (1단계 외 모든 단계에 적용)", foreground="green").pack(side=tk.LEFT)
+        
+        # 설명 라벨
+        # desc_frame = ttk.Frame(quantity_main_frame)
+        # desc_frame.pack(fill=tk.X, pady=(10, 0))
+        # ttk.Label(desc_frame, text="※ 1단계는 별도 수량, 나머지 단계들(2-1~6)은 공통 수량 적용", 
+        #         foreground="gray", font=("맑은 고딕", 8)).pack(side=tk.LEFT)
         
         # 단계별 청크 사이즈 설정 섹션
         chunk_frame = ttk.LabelFrame(periodic_frame, text="단계별 청크 사이즈 설정", padding=5)
@@ -338,32 +363,32 @@ class PercentyAdvancedGUI:
         # 청크 사이즈 변수들 초기화
         if not hasattr(self, 'periodic_chunk_vars'):
             self.periodic_chunk_vars = {
-                '1': tk.StringVar(value="10"),      # step1_core.py 기본값
-                '21': tk.StringVar(value="5"),      # step2_1_core.py 기본값
-                '22': tk.StringVar(value="5"),      # step2_2_core.py 기본값
-                '23': tk.StringVar(value="5"),      # step2_3_core.py 기본값
+                '1': tk.StringVar(value="20"),      # step1_core.py 기본값
+                '51': tk.StringVar(value="20"),     # step5_1_core.py 기본값
+                '52': tk.StringVar(value="20"),     # step5_2_core.py 기본값
+                '53': tk.StringVar(value="20"),     # step5_3_core.py 기본값
+                '21': tk.StringVar(value="10"),      # step2_1_core.py 기본값
+                '22': tk.StringVar(value="10"),      # step2_2_core.py 기본값
+                '23': tk.StringVar(value="10"),      # step2_3_core.py 기본값
+                '4': tk.StringVar(value="자동"),     # step4는 자동으로 번역 가능한 수량 감지
                 '31': tk.StringVar(value="2"),      # step3_1_core.py 기본값
                 '32': tk.StringVar(value="2"),      # step3_2_core.py 기본값
                 '33': tk.StringVar(value="2"),      # step3_3_core.py 기본값
-                '4': tk.StringVar(value="자동"),     # step4는 자동으로 번역 가능한 수량 감지
-                '51': tk.StringVar(value="10"),     # step5_1_core.py 기본값
-                '52': tk.StringVar(value="10"),     # step5_2_core.py 기본값
-                '53': tk.StringVar(value="10"),     # step5_3_core.py 기본값
             }
         
         # 청크 사이즈 입력 필드들을 그리드로 배치
         chunk_labels = {
             '1': '단계 1',
+            '51': '단계 5-1',
+            '52': '단계 5-2',
+            '53': '단계 5-3',            
             '21': '단계 2-1',
             '22': '단계 2-2', 
             '23': '단계 2-3',
+            '4': '단계 4',
             '31': '단계 3-1',
             '32': '단계 3-2',
-            '33': '단계 3-3',
-            '4': '단계 4',
-            '51': '단계 5-1',
-            '52': '단계 5-2',
-            '53': '단계 5-3'
+            '33': '단계 3-3'
         }
         
         # 청크 사이즈 입력 필드들을 6열로 배치
@@ -391,16 +416,16 @@ class PercentyAdvancedGUI:
                 row += 1
         
         # 청크 사이즈 설명
-        chunk_info_frame = ttk.Frame(chunk_frame)
-        chunk_info_frame.pack(fill=tk.X, pady=(10, 0))
-        ttk.Label(chunk_info_frame, text="※ 청크 사이즈: 한 번에 처리할 항목 수 (작을수록 안정적, 클수록 빠름)", 
-                 foreground="gray", font=("맑은 고딕", 8)).pack(side=tk.LEFT)
-        
-        # 4단계 특별 설명 추가
-        chunk_info_frame2 = ttk.Frame(chunk_frame)
-        chunk_info_frame2.pack(fill=tk.X, pady=(2, 0))
-        ttk.Label(chunk_info_frame2, text="※ 단계 4: 번역 가능한 상품 수량을 자동으로 감지하여 처리 (청크 사이즈 불필요)", 
-                 foreground="blue", font=("맑은 고딕", 8)).pack(side=tk.LEFT)
+        # chunk_info_frame = ttk.Frame(chunk_frame)
+        # chunk_info_frame.pack(fill=tk.X, pady=(10, 0))
+        # ttk.Label(chunk_info_frame, text="※ 청크 사이즈: 한 번에 처리할 항목 수 (작을수록 안정적, 클수록 빠름)", 
+        #          foreground="gray", font=("맑은 고딕", 8)).pack(side=tk.LEFT)
+        # 
+        # # 4단계 특별 설명 추가
+        # chunk_info_frame2 = ttk.Frame(chunk_frame)
+        # chunk_info_frame2.pack(fill=tk.X, pady=(2, 0))
+        # ttk.Label(chunk_info_frame2, text="※ 단계 4: 번역 가능한 상품 수량을 자동으로 감지하여 처리 (청크 사이즈 불필요)", 
+        #          foreground="blue", font=("맑은 고딕", 8)).pack(side=tk.LEFT)
         
         # 단계 선택 섹션
         step_frame = ttk.LabelFrame(periodic_frame, text="실행할 단계 선택", padding=5)
@@ -409,7 +434,7 @@ class PercentyAdvancedGUI:
         # 주기적 실행용 단계 변수들 초기화
         if not hasattr(self, 'periodic_step_vars'):
             self.periodic_step_vars = {}
-            for step in ['1', '21', '22', '23', '31', '32', '33', '4', '51', '52', '53', '6']:
+            for step in ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']:
                 self.periodic_step_vars[step] = tk.BooleanVar()
         
         # 단계 체크박스들을 배치
@@ -429,9 +454,9 @@ class PercentyAdvancedGUI:
         }
         
         positions = [
-            ('1', 0, 0), ('21', 0, 1), ('22', 0, 2), ('23', 0, 3),
-            ('31', 1, 0), ('32', 1, 1), ('33', 1, 2), ('4', 1, 3),
-            ('51', 2, 0), ('52', 2, 1), ('53', 2, 2), ('6', 2, 3)
+            ('1', 0, 0), ('51', 0, 1), ('52', 0, 2), ('53', 0, 3),
+            ('21', 1, 0), ('22', 1, 1), ('23', 1, 2), ('4', 1, 3),
+            ('31', 2, 0), ('32', 2, 1), ('33', 2, 2), ('6', 2, 3)
         ]
         
         for step, row, col in positions:
@@ -471,7 +496,7 @@ class PercentyAdvancedGUI:
         periodic_account_list_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         
         # 스크롤 가능한 계정 목록
-        periodic_canvas = tk.Canvas(periodic_account_list_frame, height=100)
+        periodic_canvas = tk.Canvas(periodic_account_list_frame, height=80)
         periodic_scrollbar = ttk.Scrollbar(periodic_account_list_frame, orient="vertical", command=periodic_canvas.yview)
         periodic_scrollable_frame = ttk.Frame(periodic_canvas)
         
@@ -533,9 +558,9 @@ class PercentyAdvancedGUI:
         
         # 시간 변수 초기화
         if not hasattr(self, 'periodic_hour_var'):
-            self.periodic_hour_var = tk.StringVar(value="09")
+            self.periodic_hour_var = tk.StringVar(value="04")
         if not hasattr(self, 'periodic_minute_var'):
-            self.periodic_minute_var = tk.StringVar(value="00")
+            self.periodic_minute_var = tk.StringVar(value="30")
         
         hour_entry = ttk.Entry(time_frame, textvariable=self.periodic_hour_var, width=5)
         hour_entry.pack(side=tk.LEFT, padx=(0, 5))
@@ -549,7 +574,7 @@ class PercentyAdvancedGUI:
         
         # 주기적 실행 제어 버튼들
         control_frame = ttk.Frame(periodic_frame)
-        control_frame.pack(fill=tk.X, pady=(20, 0))
+        control_frame.pack(fill=tk.X, pady=(5, 0))
         
         self.periodic_start_button = tk.Button(control_frame, text="주기적 실행 시작", 
                                               command=self._start_periodic_execution,
@@ -789,7 +814,8 @@ class PercentyAdvancedGUI:
         
     def get_selected_steps(self):
         """선택된 단계 목록 반환"""
-        return [step for step, var in self.step_vars.items() if var.get()]
+        step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
+        return [step for step in step_order if step in self.step_vars and self.step_vars[step].get()]
         
     def _add_log(self, message):
         """로그 메시지 추가"""
@@ -835,6 +861,8 @@ class PercentyAdvancedGUI:
                 'headless': self.headless_var.get(),
                 'auto_retry': self.auto_retry_var.get(),
                 'max_retries': self.max_retries_var.get(),
+                'periodic_step1_quantity': self.periodic_step1_quantity_var.get(),
+                'periodic_other_quantity': self.periodic_other_quantity_var.get(),
                 'saved_at': datetime.now().isoformat()
             }
             
@@ -873,6 +901,10 @@ class PercentyAdvancedGUI:
                 self.auto_retry_var.set(config.get('auto_retry', True))
                 self.max_retries_var.set(config.get('max_retries', '3'))
                 
+                # 주기적 실행 배치수량 복원
+                self.periodic_step1_quantity_var.set(config.get('periodic_step1_quantity', '5'))
+                self.periodic_other_quantity_var.set(config.get('periodic_other_quantity', '5'))
+                
                 self._add_log("설정이 로드되었습니다.")
             else:
                 self._add_log("설정 파일이 없습니다. 기본값을 사용합니다.")
@@ -897,6 +929,16 @@ class PercentyAdvancedGUI:
         self.headless_var.set(False)
         self.auto_retry_var.set(True)
         self.max_retries_var.set("3")
+        
+        # 주기적 실행 배치수량 기본값
+        self.periodic_step1_quantity_var.set("5")
+        self.periodic_other_quantity_var.set("5")
+        
+        # 주기적 실행 시간 기본값
+        if hasattr(self, 'periodic_hour_var'):
+            self.periodic_hour_var.set("04")
+        if hasattr(self, 'periodic_minute_var'):
+            self.periodic_minute_var.set("30")
         
         self._add_log("기본값으로 복원되었습니다.")
         
@@ -1373,15 +1415,26 @@ class PercentyAdvancedGUI:
                 messagebox.showerror("오류", "주기적 실행 관리자가 초기화되지 않았습니다.")
                 return
             
-            # 배치 수량 검증
-            quantity_str = self.periodic_quantity_var.get().strip()
-            if not quantity_str.isdigit():
-                messagebox.showerror("오류", "배치 수량은 숫자만 입력해주세요.")
+            # 1단계 전용 배치 수량 검증
+            step1_quantity_str = self.periodic_step1_quantity_var.get().strip()
+            if not step1_quantity_str.isdigit():
+                messagebox.showerror("오류", "1단계 전용 배치 수량은 숫자만 입력해주세요.")
                 return
             
-            quantity = int(quantity_str)
-            if quantity <= 0:
-                messagebox.showerror("오류", "배치 수량은 1 이상이어야 합니다.")
+            step1_quantity = int(step1_quantity_str)
+            if step1_quantity <= 0:
+                messagebox.showerror("오류", "1단계 전용 배치 수량은 1 이상이어야 합니다.")
+                return
+            
+            # 나머지 단계 공통 배치 수량 검증
+            other_quantity_str = self.periodic_other_quantity_var.get().strip()
+            if not other_quantity_str.isdigit():
+                messagebox.showerror("오류", "나머지 단계 공통 배치 수량은 숫자만 입력해주세요.")
+                return
+            
+            other_quantity = int(other_quantity_str)
+            if other_quantity <= 0:
+                messagebox.showerror("오류", "나머지 단계 공통 배치 수량은 1 이상이어야 합니다.")
                 return
             
             # 시간 검증
@@ -1399,8 +1452,9 @@ class PercentyAdvancedGUI:
                 messagebox.showerror("오류", "올바른 시간을 입력해주세요. (시: 0-23, 분: 0-59)")
                 return
             
-            # 선택된 단계 확인
-            selected_steps = [step for step, var in self.periodic_step_vars.items() if var.get()]
+            # 선택된 단계 확인 (올바른 순서로 정렬)
+            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
+            selected_steps = [step for step in step_order if step in self.periodic_step_vars and self.periodic_step_vars[step].get()]
             if not selected_steps:
                 messagebox.showerror("오류", "실행할 단계를 선택해주세요.")
                 return
@@ -1429,11 +1483,12 @@ class PercentyAdvancedGUI:
             # 주기적 실행 설정 구성
             schedule_time = f"{hour:02d}:{minute:02d}"
             config = {
-                'batch_quantity': quantity,
+                'step1_quantity': step1_quantity,  # 1단계 전용 배치 수량
+                'other_quantity': other_quantity,  # 나머지 단계 공통 배치 수량
                 'selected_steps': selected_steps,
                 'selected_accounts': selected_accounts,
                 'schedule_time': schedule_time,
-                'step_interval': 30,  # 단계 간 30초 대기
+                'step_interval': 10,  # 단계 간 10초 대기
                 'chunk_sizes': chunk_sizes  # 단계별 청크 사이즈 추가
             }
             
@@ -1445,7 +1500,8 @@ class PercentyAdvancedGUI:
                 # 성공 메시지
                 message = f"주기적 실행이 시작되었습니다.\n\n"
                 message += f"실행 시간: 매일 {schedule_time}\n"
-                message += f"배치 수량: {quantity}개\n"
+                message += f"1단계 배치 수량: {step1_quantity}개\n"
+                message += f"나머지 단계 배치 수량: {other_quantity}개\n"
                 message += f"선택된 단계: {', '.join(selected_steps)}\n"
                 message += f"선택된 계정: {len(selected_accounts)}개"
                 
@@ -1492,19 +1548,31 @@ class PercentyAdvancedGUI:
                 messagebox.showerror("오류", "주기적 실행 관리자가 초기화되지 않았습니다.")
                 return
             
-            # 배치 수량 검증
-            quantity_str = self.periodic_quantity_var.get().strip()
-            if not quantity_str.isdigit():
-                messagebox.showerror("오류", "배치 수량은 숫자만 입력해주세요.")
+            # 1단계 전용 배치 수량 검증
+            step1_quantity_str = self.periodic_step1_quantity_var.get().strip()
+            if not step1_quantity_str.isdigit():
+                messagebox.showerror("오류", "1단계 전용 배치 수량은 숫자만 입력해주세요.")
                 return
             
-            quantity = int(quantity_str)
-            if quantity <= 0:
-                messagebox.showerror("오류", "배치 수량은 1 이상이어야 합니다.")
+            step1_quantity = int(step1_quantity_str)
+            if step1_quantity <= 0:
+                messagebox.showerror("오류", "1단계 전용 배치 수량은 1 이상이어야 합니다.")
                 return
             
-            # 선택된 단계 확인
-            selected_steps = [step for step, var in self.periodic_step_vars.items() if var.get()]
+            # 나머지 단계 공통 배치 수량 검증
+            other_quantity_str = self.periodic_other_quantity_var.get().strip()
+            if not other_quantity_str.isdigit():
+                messagebox.showerror("오류", "나머지 단계 공통 배치 수량은 숫자만 입력해주세요.")
+                return
+            
+            other_quantity = int(other_quantity_str)
+            if other_quantity <= 0:
+                messagebox.showerror("오류", "나머지 단계 공통 배치 수량은 1 이상이어야 합니다.")
+                return
+            
+            # 선택된 단계 확인 (올바른 순서로 정렬)
+            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
+            selected_steps = [step for step in step_order if step in self.periodic_step_vars and self.periodic_step_vars[step].get()]
             if not selected_steps:
                 messagebox.showerror("오류", "실행할 단계를 선택해주세요.")
                 return
@@ -1517,12 +1585,13 @@ class PercentyAdvancedGUI:
             
             # 테스트 실행 (여기서는 메시지만 표시)
             message = f"테스트 실행이 시작됩니다.\n\n"
-            message += f"배치 수량: {quantity}개\n"
+            message += f"1단계 배치 수량: {step1_quantity}개\n"
+            message += f"나머지 단계 배치 수량: {other_quantity}개\n"
             message += f"선택된 단계: {', '.join(selected_steps)}\n"
             message += f"선택된 계정: {len(selected_accounts)}개"
             
             messagebox.showinfo("테스트 실행", message)
-            self._add_log(f"주기적 실행 테스트 시작: 배치 수량 {quantity}개, 단계 {', '.join(selected_steps)}")
+            self._add_log(f"주기적 실행 테스트 시작: 1단계 {step1_quantity}개, 나머지 단계 {other_quantity}개, 단계 {', '.join(selected_steps)}")
             
         except Exception as e:
             messagebox.showerror("오류", f"테스트 실행 중 오류가 발생했습니다: {str(e)}")

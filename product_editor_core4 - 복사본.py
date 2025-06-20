@@ -281,12 +281,6 @@ class ProductEditorCore4:
         try:
             logger.info("1-4. 일괄 번역 처리 시작")
             
-            # 새로운 모달창이 뜨는 경우 처리
-            if self._handle_new_modal():
-                logger.info("새로운 모달창 감지 및 처리 완료. 일괄 번역 계속.")
-            else:
-                logger.info("새로운 모달창 없음. 일괄 번역 진행.")
-            
             # 일괄 번역 버튼 클릭
             if not self.upload_utils.click_batch_translate_button():
                 logger.error("일괄 번역 버튼 클릭 실패")
@@ -460,55 +454,6 @@ class ProductEditorCore4:
         except Exception as e:
             logger.error(f"상품수 확인 중 오류: {e}")
             return False  # 오류 시 안전하게 진행
-    
-    def _handle_new_modal(self):
-        """
-        새로운 모달창이 나타나는 경우를 감지하고 처리
-        
-        Returns:
-            bool: 모달창을 처리했으면 True, 모달창이 없으면 False
-        """
-        try:
-            # 새로운 모달창 감지 (ant-modal-content 클래스를 가진 요소)
-            modal_selector = "div.sc-dSCufp.idHAVL div.ant-modal-content"
-            
-            # 모달창이 존재하는지 확인
-            modal_elements = self.driver.find_elements(By.CSS_SELECTOR, modal_selector)
-            
-            if not modal_elements:
-                logger.debug("새로운 모달창이 감지되지 않음")
-                return False
-            
-            logger.info("새로운 모달창 감지됨")
-            
-            # 확인 버튼 클릭 (ant-btn-primary 클래스를 가진 버튼)
-            confirm_button_selector = "button.ant-btn.ant-btn-primary"
-            
-            try:
-                # 확인 버튼 찾기
-                confirm_button = WebDriverWait(self.driver, 3).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, confirm_button_selector))
-                )
-                
-                # 확인 버튼 클릭
-                confirm_button.click()
-                logger.info("새로운 모달창의 '확인' 버튼 클릭 완료")
-                
-                # 모달창이 사라질 때까지 대기
-                WebDriverWait(self.driver, 5).until(
-                    EC.invisibility_of_element_located((By.CSS_SELECTOR, modal_selector))
-                )
-                
-                logger.info("새로운 모달창이 성공적으로 닫힘")
-                return True
-                
-            except TimeoutException:
-                logger.warning("새로운 모달창의 확인 버튼을 찾을 수 없거나 클릭할 수 없음")
-                return False
-                
-        except Exception as e:
-            logger.error(f"새로운 모달창 처리 중 오류: {e}")
-            return False
 
 # 편의 함수들
 def batch_translate_products(driver, config=None):

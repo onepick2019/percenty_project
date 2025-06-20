@@ -13,6 +13,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 
+# 공통 드롭다운 유틸리티 임포트
+from dropdown_utils_common import get_common_dropdown_utils
+
 # 로깅 설정
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,9 @@ class PercentyDropdown:
             driver: 셀레니움 웹드라이버 인스턴스
         """
         self.driver = driver
-        logger.info("퍼센티 드롭박스 및 그룹 선택 유틸리티 초기화 (코어5 전용)")
+        # 공통 드롭다운 유틸리티 인스턴스 생성
+        self.common_utils = get_common_dropdown_utils(driver)
+        logger.info("퍼센티 드롭박스 및 그룹 선택 유틸리티 초기화 (코어5 전용 + 공통 유틸리티)")
     
     # =============================================================================
     # 상품 전체 선택 및 그룹 이동 메서드
@@ -747,62 +752,46 @@ class PercentyDropdown:
         try:
             logger.info(f"상품 아이템({item_index})의 그룹 드롭박스 열기")
             
-            # 개별 상품의 드롭박스 선택자 - 더 정확한 선택자 사용
+            # DOM 분석 기반 통합된 선택자 - 성공률 높은 순서로 배치
             selectors = [
-                # '그룹 없음' 텍스트가 포함된 드롭박스 선택
-                "//div[contains(@class, 'ant-select-single')][.//span[contains(text(), '그룹 없음')]]",
+                # 1. 테이블 행 기반 선택자 (가장 안정적)
+                f"(//tr[contains(@class, 'ant-table-row')]//div[contains(@class, 'ant-select-outlined') and contains(@class, 'ant-select-show-search')])[{item_index + 1}]",
                 
-                # sc-dkmUuB 클래스가 포함된 드롭박스 선택 (상품 그룹 드롭박스에만 있는 클래스)
-                "//div[contains(@class, 'ant-select-single')][.//span[contains(@class, 'sc-dkmUuB')]]",
+                # 2. 위치 기반 선택자 (단순하고 빠름)
+                f"(//div[contains(@class, 'ant-select-outlined') and contains(@class, 'ant-select-show-search')])[{item_index + 1}]",
                 
-                # 순서 기반 배열 선택자 (대체 수단으로만 사용)
-                f"(//div[contains(@class, 'ant-select-single') and not(contains(@class, 'ant-select-borderless'))])[position()={item_index + 1}]",
+                # 3. 컨테이너 기반 선택자
+                f"(//div[contains(@class, 'ant-select-single') and not(contains(@class, 'ant-select-borderless'))])[{item_index + 1}]",
                 
-                # 그룹상품관리 화면 (대체 선택자)
-                f"(//div[contains(@class, 'sc-gwZKzw')]//div[contains(@class, 'ant-select-single')])[position()={item_index + 1}]"
+                # 4. 텍스트 기반 백업 선택자 (마지막 수단)
+                "//div[contains(@class, 'ant-select-single')][.//span[contains(text(), '그룹 없음')]]"
             ]
             
-            # JavaScript로 서술적 접근 시도 (선택자가 실패할 경우를 대비)
-            js_script = """
-            try {
-                // 그룹 드롭박스 찾기 (그룹 없음 텍스트 포함 또는 sc-dkmUuB 클래스 포함)
-                const groupDropdowns = Array.from(document.querySelectorAll('div.ant-select-single')).filter(el => {
-                    return el.textContent.includes('그룹 없음') || 
-                           el.querySelector('.sc-dkmUuB') !== null;
-                });
-                
-                if (groupDropdowns.length > 0) {
-                    const found = groupDropdowns[0];
-                    found.scrollIntoView({behavior: 'smooth', block: 'center'});
-                    return true;
-                }
-                return false;
-            } catch (e) {
-                return false;
-            }
-            """
-            
-            # 먼저 JavaScript로 요소를 화면 중앙에 보이게 하기
-            self.driver.execute_script(js_script)
-            time.sleep(DELAY_VERY_SHORT)  # 스크롤링 대기
-            
             dropdown_element = None
-            for selector in selectors:
+            # 각 선택자마다 1초씩만 대기하여 총 지연 시간 단축
+            for i, selector in enumerate(selectors):
                 try:
-                    dropdown_element = WebDriverWait(self.driver, timeout).until(
+                    logger.debug(f"선택자 {i+1} 시도: {selector[:50]}...")
+                    dropdown_element = WebDriverWait(self.driver, 1).until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
+                    logger.debug(f"선택자 {i+1} 성공")
                     break
                 except (TimeoutException, NoSuchElementException):
+                    logger.debug(f"선택자 {i+1} 실패")
                     continue
                     
             if not dropdown_element:
                 logger.error(f"상품 아이템({item_index})의 그룹 드롭박스를 찾을 수 없습니다.")
                 return False
-                    
+            
+            # 요소를 화면에 보이게 스크롤
+            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", dropdown_element)
+            time.sleep(DELAY_VERY_SHORT)
+            
             # 드롭박스 클릭하여 열기
             dropdown_element.click()
-            time.sleep(DELAY_SHORT)
+            time.sleep(DELAY_VERY_SHORT)  # 지연 시간 단축
             logger.info(f"상품 아이템({item_index})의 그룹 드롭박스가 열렸습니다.")
             return True
             
@@ -812,7 +801,7 @@ class PercentyDropdown:
     
     def select_group_by_name(self, group_name, timeout=10):
         """
-        열린 드롭다운 메뉴에서 이름으로 그룹 선택 (dropdown_utils3 방식 적용)
+        열린 드롭다운 메뉴에서 이름으로 그룹 선택 (공통 유틸리티 사용)
         
         Args:
             group_name: 선택할 그룹의 이름 (예: "등록B", "완료D3")
@@ -822,50 +811,10 @@ class PercentyDropdown:
             bool: 성공 여부
         """
         try:
-            logger.info(f"드롭다운 메뉴에서 '{group_name}' 그룹 선택")
+            logger.info(f"드롭다운 메뉴에서 '{group_name}' 그룹 선택 (공통 유틸리티 사용)")
             
-            # 그룹명으로 아이템 선택자 (dropdown_utils3와 동일)
-            selectors = [
-                f"//div[contains(@class, 'ant-select-dropdown')]//div[@class='ant-select-item-option-content' and contains(text(), '{group_name}')]",
-                f"//div[contains(@class, 'ant-select-item') and contains(@class, 'ant-select-item-option') and contains(., '{group_name}')]",
-                # 대체 선택자
-                f"//div[contains(@class, 'sc-dkmUuB') and text()='{group_name}']/ancestor::div[contains(@class, 'ant-select-item')]"
-            ]
-            
-            # 드롭다운이 열린 후 스크롤 및 검색을 위한 대기
-            time.sleep(DELAY_SHORT)
-            
-            # 검색 필드에 그룹명 입력 (검색을 지원하는 드롭다운인 경우)
-            try:
-                search_input = self.driver.find_element(By.CSS_SELECTOR, "input.ant-select-selection-search-input:not([readonly])")
-                search_input.clear()
-                search_input.send_keys(group_name)
-                time.sleep(DELAY_SHORT)
-                logger.info(f"검색 필드에 '{group_name}' 입력됨")
-            except (NoSuchElementException, StaleElementReferenceException):
-                logger.warning("검색 가능한 드롭다운이 아니거나 검색 필드를 찾을 수 없습니다. 스크롤로 찾습니다.")
-                # 전체 목록을 스크롤하며 검색
-                self._scroll_and_search_for_group(group_name)
-            
-            group_element = None
-            for selector in selectors:
-                try:
-                    group_element = WebDriverWait(self.driver, timeout).until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    break
-                except (TimeoutException, NoSuchElementException, StaleElementReferenceException):
-                    continue
-                    
-            if not group_element:
-                logger.error(f"'{group_name}' 그룹을 찾을 수 없습니다.")
-                return False
-                
-            # 그룹 클릭
-            group_element.click()
-            time.sleep(DELAY_SHORT)
-            logger.info(f"'{group_name}' 그룹이 선택되었습니다.")
-            return True
+            # 공통 유틸리티의 안정적인 그룹 선택 방식 사용
+            return self.common_utils.select_group_with_verification(group_name, timeout)
             
         except Exception as e:
             logger.error(f"그룹 선택 오류: {e}")
@@ -938,8 +887,7 @@ class PercentyDropdown:
     
     def move_product_to_group(self, group_name, product_index=0, timeout=5):
         """
-        개별 상품을 특정 그룹으로 이동 (코어5 전용 - 안정적인 백업 구조)
-        3단계 백업 구조: 1차(드롭다운+이름) -> 2차(원스텝) -> 3차(모달 방식)
+        개별 상품을 특정 그룹으로 이동 (공통 유틸리티 사용 - 단순화된 안정적 방식)
         
         Args:
             group_name: 이동할 그룹 이름
@@ -950,15 +898,15 @@ class PercentyDropdown:
             bool: 성공 여부
         """
         try:
-            logger.info(f"상품 {product_index}를 '{group_name}' 그룹으로 이동 시작 (3단계 백업 구조)")
+            logger.info(f"상품 {product_index}를 '{group_name}' 그룹으로 이동 시작 (공통 유틸리티 사용)")
             
-            # 1차 시도: 정상적인 드롭다운 열기 방식 (코어3과 동일)
-            logger.info("1차 시도: 정상적인 드롭다운 열기 방식")
+            # 1차 시도: 드롭다운 열기 + 공통 유틸리티 그룹 선택
+            logger.info("1차 시도: 드롭다운 열기 + 공통 유틸리티 그룹 선택")
             try:
                 if self.open_product_item_dropdown(item_index=product_index, timeout=timeout):
                     logger.info("드롭다운 열기 성공")
                     if self.select_group_by_name(group_name):
-                        logger.info(f"1차 시도 성공: 정상적인 방식으로 '{group_name}' 그룹 이동 완료")
+                        logger.info(f"1차 시도 성공: '{group_name}' 그룹 이동 완료")
                         return True
                     else:
                         logger.warning(f"드롭다운에서 '{group_name}' 그룹 선택 실패")
@@ -967,28 +915,20 @@ class PercentyDropdown:
             except Exception as dropdown_error:
                 logger.error(f"1차 시도 중 오류 발생: {dropdown_error}")
             
-            # 2차 시도: 기본 방식 (원스텝)
-            logger.warning("1차 시도 실패, 2차 시도: 기본 방식 (원스텝)")
-            success = self.select_product_group_by_name(group_name, item_index=product_index)
-            
-            if success:
-                logger.info(f"2차 시도 성공: 기본 방식으로 '{group_name}' 그룹 이동 완료")
-                return True
-            
-            # 3차 시도: 그룹지정 모달 방식 (최종 백업)
-            logger.warning("2차 시도 실패, 3차 시도: 그룹지정 모달 방식 (최종 백업)")
+            # 2차 시도: 모달 방식 (백업)
+            logger.warning("1차 시도 실패, 2차 시도: 모달 방식 (백업)")
             try:
-                # 1. 첫번째 상품의 체크박스 선택
+                # 첫번째 상품의 체크박스 선택
                 if self.select_first_product():
                     logger.info("첫번째 상품 체크박스 선택 성공")
                     
-                    # 2. 그룹지정 모달 열기
+                    # 그룹지정 모달 열기
                     if self.open_group_assignment_modal():
                         logger.info("그룹지정 모달 열기 성공")
                         
-                        # 3. 모달에서 대상 그룹 선택
+                        # 모달에서 대상 그룹 선택
                         if self.select_group_in_modal(group_name):
-                            logger.info(f"3차 시도 성공: 모달에서 '{group_name}' 그룹 선택 완료")
+                            logger.info(f"2차 시도 성공: 모달에서 '{group_name}' 그룹 선택 완료")
                             return True
                         else:
                             logger.error(f"모달에서 '{group_name}' 그룹 선택 실패")
@@ -998,11 +938,10 @@ class PercentyDropdown:
                     logger.error("첫번째 상품 체크박스 선택 실패")
                     
             except Exception as modal_error:
-                logger.error(f"3차 시도 중 오류 발생: {modal_error}")
+                logger.error(f"2차 시도 중 오류 발생: {modal_error}")
             
             # 모든 시도 실패
             logger.error(f"모든 시도 실패: 상품을 '{group_name}' 그룹으로 이동할 수 없습니다.")
-            return False
             
         except Exception as e:
             logger.error(f"상품 그룹 이동 중 오류: {e}")
@@ -1023,36 +962,80 @@ class PercentyDropdown:
             
             # 첫번째 상품의 체크박스 선택자들 (Select all 체크박스 제외)
             selectors = [
-                # 테이블의 첫번째 행의 체크박스 (Select all 제외)
-                "//tbody[contains(@class, 'ant-table-tbody')]//tr[1]//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox' and not(@aria-label)]",
-                # 첫번째 상품 행의 체크박스 (대체 선택자, Select all 제외)
-                "//tr[contains(@class, 'ant-table-row')][1]//span[contains(@class, 'ant-checkbox')]//input[@type='checkbox' and not(@aria-label)]",
-                # 더 구체적인 선택자 (Select all 제외)
-                "//div[contains(@class, 'ant-table-body')]//tr[1]//label[contains(@class, 'ant-checkbox-wrapper')]//input[@type='checkbox' and not(@aria-label)]"
+                # 기본 테이블 구조의 첫번째 행 체크박스
+                "//tbody[contains(@class, 'ant-table-tbody')]//tr[1]//input[@type='checkbox']",
+                # 더 포괄적인 첫번째 행 체크박스
+                "//tr[contains(@class, 'ant-table-row')][1]//input[@type='checkbox']",
+                # 체크박스 래퍼를 통한 선택
+                "//tbody//tr[1]//span[contains(@class, 'ant-checkbox')]//input",
+                # 선택 컬럼의 첫번째 체크박스
+                "//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox']",
+                # 가장 포괄적인 선택자
+                "(//input[@type='checkbox'])[2]",  # 첫번째는 보통 Select All이므로 두번째
+                # 대체 선택자
+                "//div[contains(@class, 'ant-table-body')]//tr[1]//input[@type='checkbox']"
             ]
             
             checkbox_element = None
-            for selector in selectors:
+            successful_selector = None
+            
+            for i, selector in enumerate(selectors):
                 try:
-                    checkbox_element = WebDriverWait(self.driver, timeout).until(
+                    logger.debug(f"체크박스 선택자 {i+1}/{len(selectors)} 시도: {selector}")
+                    checkbox_element = WebDriverWait(self.driver, 2).until(
+                        EC.presence_of_element_located((By.XPATH, selector))
+                    )
+                    # 요소가 클릭 가능한지 확인
+                    WebDriverWait(self.driver, 2).until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
+                    successful_selector = selector
+                    logger.info(f"체크박스 요소 발견 (선택자 {i+1}): {selector}")
                     break
-                except (TimeoutException, NoSuchElementException):
+                except (TimeoutException, NoSuchElementException) as e:
+                    logger.debug(f"선택자 {i+1} 실패: {e}")
                     continue
                     
             if not checkbox_element:
-                logger.error("첫번째 상품의 체크박스를 찾을 수 없습니다.")
+                logger.error("모든 선택자로 첫번째 상품의 체크박스를 찾을 수 없습니다.")
+                # 페이지의 모든 체크박스 요소 확인
+                try:
+                    all_checkboxes = self.driver.find_elements(By.XPATH, "//input[@type='checkbox']")
+                    logger.info(f"페이지에서 발견된 총 체크박스 수: {len(all_checkboxes)}")
+                    for i, cb in enumerate(all_checkboxes[:5]):  # 처음 5개만 로깅
+                        try:
+                            logger.info(f"체크박스 {i+1}: visible={cb.is_displayed()}, enabled={cb.is_enabled()}")
+                        except:
+                            logger.info(f"체크박스 {i+1}: 정보 확인 불가")
+                except Exception as e:
+                    logger.error(f"체크박스 디버깅 중 오류: {e}")
                 return False
                     
             # 이미 선택되어 있는지 확인
-            is_checked = checkbox_element.is_selected()
+            try:
+                is_checked = checkbox_element.is_selected()
+                logger.info(f"체크박스 현재 상태: {'선택됨' if is_checked else '선택 안됨'}")
+            except Exception as e:
+                logger.warning(f"체크박스 상태 확인 실패: {e}, 클릭 시도")
+                is_checked = False
             
             # 선택되어 있지 않으면 클릭
             if not is_checked:
-                checkbox_element.click()
-                time.sleep(DELAY_SHORT)
-                logger.info("첫번째 상품이 선택되었습니다.")
+                try:
+                    # 여러 클릭 방법 시도
+                    try:
+                        checkbox_element.click()
+                        logger.info("직접 클릭으로 체크박스 선택 성공")
+                    except Exception as e:
+                        logger.warning(f"직접 클릭 실패: {e}, JavaScript 클릭 시도")
+                        self.driver.execute_script("arguments[0].click();", checkbox_element)
+                        logger.info("JavaScript 클릭으로 체크박스 선택 성공")
+                    
+                    time.sleep(DELAY_SHORT)
+                    logger.info("첫번째 상품이 선택되었습니다.")
+                except Exception as e:
+                    logger.error(f"체크박스 클릭 실패: {e}")
+                    return False
             else:
                 logger.info("첫번째 상품이 이미 선택되어 있습니다.")
                 
@@ -1338,40 +1321,19 @@ class PercentyDropdown:
     
     def _scroll_and_search_for_group(self, group_name):
         """
-        드롭다운 컨테이너 내에서 스크롤하며 그룹 검색 (dropdown_utils3에서 가져옴)
+        드롭다운 컨테이너 내에서 스크롤하며 그룹 검색 (공통 유틸리티 사용)
         
         Args:
             group_name: 찾을 그룹 이름
         """
         try:
-            # 드롭다운 컨테이너 찾기
-            dropdown_container = self.driver.find_element(By.CSS_SELECTOR, ".ant-select-dropdown .rc-virtual-list-holder")
-            
-            max_scrolls = 10
-            scroll_count = 0
-            
-            while scroll_count < max_scrolls:
-                # 현재 보이는 그룹 요소들 확인
-                visible_groups = self.driver.find_elements(By.XPATH, "//div[contains(@class, 'ant-select-item-option')]")
-                
-                for group in visible_groups:
-                    try:
-                        group_text = group.get_attribute('textContent') or group.text
-                        if group_name in group_text:
-                            logger.info(f"스크롤 중 '{group_name}' 그룹 발견")
-                            return
-                    except StaleElementReferenceException:
-                        continue
-                
-                # 아래로 스크롤
-                self.driver.execute_script("arguments[0].scrollTop += 200;", dropdown_container)
-                time.sleep(0.2)
-                scroll_count += 1
-                
-            logger.warning(f"스크롤 완료했지만 '{group_name}' 그룹을 찾지 못했습니다.")
+            logger.info(f"공통 유틸리티를 사용하여 '{group_name}' 그룹 스크롤 검색")
+            # 공통 유틸리티의 고급 스크롤 검색 사용
+            return self.common_utils.advanced_scroll_and_search_for_group(group_name)
             
         except Exception as e:
             logger.error(f"스크롤 검색 중 오류: {e}")
+            return False
     
     def get_product_count(self):
         """
