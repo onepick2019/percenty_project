@@ -517,7 +517,20 @@ class ProductEditorCore:
                     # 이미지 개수를 클래스 변수로 저장 (23번 단계에서 재활용)
                     self.detail_image_count = image_count
                     
-                    if image_count > 30:
+                    # 이미지 개수가 0개인 경우 상품 삭제 처리
+                    if image_count == 0:
+                        logger.warning("이미지 개수가 0개입니다. 상품을 삭제합니다.")
+                        
+                        # 일괄편집 모달 창 닫기 (ESC 키 사용)
+                        keyboard = KeyboardShortcuts(self.driver, use_selenium=True)
+                        keyboard.escape_key(use_selenium=True, delay=DELAY_SHORT)
+                        logger.info("일괄편집 모달창 ESC 키로 닫기 성공")
+                        
+                        # 상품 삭제 처리
+                        self._delete_product_from_percenty()
+                        return  # 상품 삭제 후 함수 종료
+                    
+                    elif image_count > 30:
                         # 30개 이상의 이미지는 삭제 (31번째 이미지부터 삭제)
                         result = image_manager.delete_images_beyond_limit(limit=30, timeout=10)
                         logger.info(f"31번째 이후 이미지 삭제 결과: {'성공' if result else '실패'}")
@@ -1590,3 +1603,69 @@ class ProductEditorCore:
         except Exception as e:
             logger.error(f"상세페이지 이미지 수 카운트 중 오류: {e}")
             return 0
+    
+    def _delete_product_from_percenty(self):
+        """
+        퍼센티에서 상품을 삭제하는 메서드
+        이미지 개수가 0개일 때 호출됨
+        """
+        try:
+            logger.info("상품 삭제 프로세스 시작")
+            
+            # 1. 삭제 버튼 클릭
+            delete_button_selector = "div.ant-col button.ant-btn-dangerous span"
+            delete_button_xpath = "//div[@class='ant-col css-1li46mu']//button[contains(@class, 'ant-btn-dangerous')]//span[text()='삭제']"
+            
+            # CSS 선택자로 먼저 시도
+            try:
+                delete_button = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, delete_button_selector))
+                )
+                delete_button.click()
+                logger.info("삭제 버튼 클릭 성공 (CSS 선택자)")
+            except:
+                # XPath로 재시도
+                try:
+                    delete_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, delete_button_xpath))
+                    )
+                    delete_button.click()
+                    logger.info("삭제 버튼 클릭 성공 (XPath)")
+                except Exception as e:
+                    logger.error(f"삭제 버튼을 찾을 수 없습니다: {e}")
+                    return False
+            
+            # 2. 삭제 확인 모달이 나타날 때까지 대기
+            time.sleep(1)
+            
+            # 3. 상품 삭제 확인 버튼 클릭
+            confirm_delete_xpath = "//div[@class='ant-modal-footer']//button[contains(@class, 'ant-btn-primary') and contains(@class, 'ant-btn-dangerous')]//span[text()='상품 삭제']"
+            confirm_delete_css = "div.ant-modal-footer button.ant-btn-primary.ant-btn-dangerous span"
+            
+            # CSS 선택자로 먼저 시도
+            try:
+                confirm_button = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, confirm_delete_css))
+                )
+                confirm_button.click()
+                logger.info("상품 삭제 확인 버튼 클릭 성공 (CSS 선택자)")
+            except:
+                # XPath로 재시도
+                try:
+                    confirm_button = WebDriverWait(self.driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, confirm_delete_xpath))
+                    )
+                    confirm_button.click()
+                    logger.info("상품 삭제 확인 버튼 클릭 성공 (XPath)")
+                except Exception as e:
+                    logger.error(f"상품 삭제 확인 버튼을 찾을 수 없습니다: {e}")
+                    return False
+            
+            # 4. 삭제 처리 완료 대기
+            time.sleep(3)
+            logger.info("상품 삭제 프로세스 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"상품 삭제 중 오류 발생: {e}")
+            return False

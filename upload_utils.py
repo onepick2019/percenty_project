@@ -443,7 +443,59 @@ class UploadUtils:
             if not self.click_modal_upload_button():
                 logger.error("모달 업로드 버튼 클릭 실패")
                 return False
-            
+
+            # '편집하지 않은 상품' 확인 모달창 처리
+            try:
+                logger.info("업로드 확인 모달창 확인 중")
+                
+                # 확인 모달창 감지
+                confirmation_modal_selectors = [
+                    "//div[@class='ant-modal-content']//div[@class='ant-modal-confirm-content']//b[text()='편집하지 않은 상품']",
+                    "//div[@class='ant-modal-content']//div[@class='ant-modal-confirm-paragraph']//b[text()='편집하지 않은 상품']",
+                    "//div[contains(@class, 'ant-modal-content')]//div[contains(@class, 'ant-modal-confirm-body')]//div[contains(text(), '편집하지 않은 상품')]"
+                ]
+                
+                modal_found = False
+                for selector in confirmation_modal_selectors:
+                    try:
+                        WebDriverWait(self.driver, 3).until(
+                            EC.presence_of_element_located((By.XPATH, selector))
+                        )
+                        logger.info(f"업로드 확인 모달창 감지됨: {selector}")
+                        modal_found = True
+                        break
+                    except TimeoutException:
+                        continue
+                
+                if modal_found:
+                    time.sleep(0.5)  # 모달창 로딩 대기
+                    
+                    # 확인 모달창의 '업로드' 버튼 클릭
+                    upload_button_selectors = [
+                        "//div[@class='ant-modal-confirm-btns']//button[@class='ant-btn css-1li46mu ant-btn-primary']//span[text()='업로드']",
+                        "//div[@class='ant-modal-confirm-btns']//button[contains(@class, 'ant-btn-primary')]//span[text()='업로드']",
+                        "//div[contains(@class, 'ant-modal-confirm-btns')]//button[contains(@class, 'ant-btn-primary')]//span[text()='업로드']"
+                    ]
+                    
+                    for selector in upload_button_selectors:
+                        try:
+                            button = WebDriverWait(self.driver, 3).until(
+                                EC.element_to_be_clickable((By.XPATH, selector))
+                            )
+                            button.click()
+                            logger.info(f"업로드 확인 모달창의 업로드 버튼 클릭 성공: {selector}")
+                            time.sleep(1)
+                            break
+                        except TimeoutException:
+                            continue
+                    else:
+                        logger.warning("업로드 확인 모달창의 업로드 버튼을 찾을 수 없습니다")
+                else:
+                    logger.info("업로드 확인 모달창이 나타나지 않음 - 정상 진행")
+                    
+            except Exception as e:
+                logger.error(f"업로드 확인 모달창 처리 중 오류: {e}")
+
             logger.info("업로드 모달창 처리 완료")
             return True
             
@@ -486,6 +538,7 @@ class UploadUtils:
                     button.click()
                     logger.info(f"모달 업로드 버튼 클릭 성공: {selector}")
                     time.sleep(1)
+                    
                     return True
                 except TimeoutException:
                     continue
@@ -497,6 +550,137 @@ class UploadUtils:
             logger.error(f"모달 업로드 버튼 클릭 중 오류: {e}")
             return False
     
+    def _handle_upload_confirmation_modal(self) -> bool:
+        """
+        업로드 완료를 동적으로 감시하고 모달창 닫기
+        업로드 진행 상태를 모니터링하여 완료 시까지 대기한 후 모달창을 닫습니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("업로드 완료 대기 시작")
+            
+            # 업로드 완료 상태 체크 (최대 5분 대기)
+            max_wait_time = 300  # 5분
+            check_interval = 3   # 3초마다 체크
+            elapsed_time = 0
+            
+            while elapsed_time < max_wait_time:
+                try:
+                    # 1. 업로드 완료 메시지 확인 (DOM 분석 기반)
+                    completion_selectors = [
+                        "//div[contains(text(), '모든 업로드가') and contains(text(), '완료')]",
+                        "//div[contains(@class, 'Font_Gray900Regular14__xpblw') and contains(text(), '모든 업로드가') and contains(text(), '완료')]",
+                        "//span[contains(text(), '업로드 완료')]",
+                        "//span[contains(@class, 'Font_Gray900Bold14__YBBo6') and contains(text(), '업로드 완료')]"
+                    ]
+                    
+                    upload_completed = False
+                    for selector in completion_selectors:
+                        try:
+                            element = self.driver.find_element(By.XPATH, selector)
+                            if element.is_displayed():
+                                logger.info(f"업로드 완료 메시지 감지: {selector}")
+                                upload_completed = True
+                                break
+                        except NoSuchElementException:
+                            continue
+                    
+                    if upload_completed:
+                        break
+                    
+                    # 2. 진행률 100% 확인
+                    try:
+                        progress_element = self.driver.find_element(
+                            By.XPATH, "//div[@class='ant-progress-bg'][contains(@style, 'width: 100%')] | //div[@class='ant-progress-bg'][contains(@style, '--progress-percent: 1')]"
+                        )
+                        if progress_element.is_displayed():
+                            logger.info("업로드 진행률 100% 감지")
+                            upload_completed = True
+                            break
+                    except NoSuchElementException:
+                        pass
+                    
+                    # 3. 진행 상태 로깅 (업로드 중인지 확인)
+                    try:
+                        progress_text = self.driver.find_element(
+                            By.XPATH, "//span[contains(@class, 'Font_Gray900Bold14__YBBo6') and contains(text(), '업로드')]"
+                        )
+                        if progress_text.is_displayed():
+                            current_status = progress_text.text
+                            logger.info(f"업로드 진행 상태: {current_status} ({elapsed_time}/{max_wait_time}초 경과)")
+                    except NoSuchElementException:
+                        logger.info(f"업로드 진행 중... ({elapsed_time}/{max_wait_time}초 경과)")
+                    
+                    time.sleep(check_interval)
+                    elapsed_time += check_interval
+                    
+                except Exception as e:
+                    logger.warning(f"업로드 상태 체크 중 오류: {e}")
+                    time.sleep(check_interval)
+                    elapsed_time += check_interval
+            
+            if elapsed_time >= max_wait_time:
+                logger.warning("업로드 완료 대기 시간 초과")
+                return False
+            
+            # 업로드 완료 후 잠시 대기
+            logger.info("업로드 완료 확인됨, 모달창 닫기 준비")
+            time.sleep(2)
+            
+            # 닫기 버튼 클릭
+            close_selectors = [
+                "//button[contains(@class, 'ant-modal-close')]",
+                "//button[@aria-label='Close']",
+                "//span[@aria-label='close']/parent::button",
+                ".ant-modal-close",
+                "//div[contains(@class, 'ant-modal-header')]//button",
+                "//button[.//span[text()='닫기']]",
+                "//button[text()='닫기']"
+            ]
+            
+            for selector in close_selectors:
+                try:
+                    if selector.startswith('//'):
+                        # XPath 선택자
+                        close_button = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                    else:
+                        # CSS 선택자
+                        close_button = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                        )
+                    
+                    close_button.click()
+                    logger.info(f"모달창 닫기 버튼 클릭 성공: {selector}")
+                    time.sleep(1)
+                    return True
+                    
+                except TimeoutException:
+                    continue
+                except Exception as e:
+                    logger.warning(f"닫기 버튼 클릭 시도 중 오류: {e}")
+                    continue
+            
+            logger.error("모달창 닫기 버튼을 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            logger.error(f"업로드 완료 대기 및 모달창 닫기 중 오류: {e}")
+            return False
+    
+    def wait_for_upload_completion_and_close(self) -> bool:
+        """
+        업로드 완료를 대기하고 모달창을 닫는 메서드
+        _handle_upload_confirmation_modal을 호출하여 중복 코드 제거
+        
+        Returns:
+            bool: 성공 여부
+        """
+        return self._handle_upload_confirmation_modal()
+
     def _select_markets_in_modal(self, markets_to_select) -> bool:
         """
         모달창 내에서 특정 마켓들 선택

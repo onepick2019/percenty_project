@@ -517,8 +517,8 @@ class PeriodicExecutionManager:
         min_timeout = 1200
         total_timeout = max(total_timeout, min_timeout)
         
-        # 최대 타임아웃 제한 (6시간)
-        max_timeout = 21600
+        # 최대 타임아웃 제한 (48시간) - 대용량 배치 작업 지원
+        max_timeout = 172800
         total_timeout = min(total_timeout, max_timeout)
         
         return total_timeout

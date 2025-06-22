@@ -56,6 +56,9 @@ from coordinates.coordinates_editgoods import (
     DELAY_VERY_LONG
 )
 
+# 6-1단계 코어 모듈 임포트
+from product_editor_core6_1 import ProductEditorCore6_1
+
 # 로깅 설정
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,9 @@ class PercentyNewStep1:
         
         # 드롭다운 관리자 초기화
         self.dropdown_manager = get_dropdown_manager(driver)
+        
+        # 6-1단계 코어 모듈 초기화
+        self.product_editor_core6_1 = ProductEditorCore6_1(driver)
 
     def convert_coordinates(self, x, y):
         """
@@ -378,23 +384,101 @@ class PercentyNewStep1:
             logger.error(f"그룹상품관리 메뉴 클릭 중 오류 발생: {e}")
             return False
     
+    def click_product_register(self):
+        """
+        신규상품등록 메뉴 클릭 - 하이브리드 방식 (DOM 선택자 + 좌표)
+        
+        DOM 선택자를 먼저 시도하고, 실패할 경우 좌표 기반 클릭을 시도하는
+        하이브리드 방식을 구현합니다.
+        """
+        try:
+            logger.info("신규상품등록 메뉴 클릭 시도 (하이브리드 방식)")
+            
+            # 1. DOM 선택자 먼저 시도
+            dom_success = False
+            try:
+                # UI_ELEMENTS에서 정보 가져오기
+                element_info = UI_ELEMENTS["PRODUCT_REGISTER"]
+                dom_selector = element_info["dom_selector"]
+                selector_type = element_info["selector_type"]
+                
+                # DOM 요소 강조 표시 (선택적)
+                try:
+                    highlight_element(self.driver, f"{selector_type}={dom_selector}")
+                except:
+                    pass
+                
+                logger.info(f"신규상품등록 메뉴 DOM 선택자 기반 클릭 시도: {selector_type}={dom_selector}")
+                
+                # Selenium By 타입으로 변환
+                by_type = By.XPATH if selector_type.lower() == "xpath" else By.CSS_SELECTOR
+                
+                # 요소 찾기 시도
+                element = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((by_type, dom_selector))
+                )
+                
+                # 요소가 발견되면 클릭
+                element.click()
+                logger.info("신규상품등록 메뉴 DOM 선택자 기반 클릭 성공")
+                dom_success = True
+                
+            except Exception as dom_error:
+                logger.warning(f"DOM 선택자를 사용한 클릭 실패: {dom_error}")
+                dom_success = False
+            
+            # 2. DOM 선택자로 실패한 경우 좌표 기반 클릭 시도
+            if not dom_success:
+                try:
+                    logger.info("DOM 선택자로 클릭 실패, 좌표 기반 클릭으로 전환합니다.")
+                    # UI_ELEMENTS에서 좌표 가져오기
+                    product_register_coords = UI_ELEMENTS["PRODUCT_REGISTER"]["coordinates"]
+                    logger.info(f"좌표 기반 클릭 시도: {product_register_coords}")
+                    
+                    # 좌표 클릭 실행
+                    self.click_at_coordinates(product_register_coords, delay_type=DELAY_SHORT)
+                    logger.info("좌표 기반 클릭 성공")
+                except Exception as coord_error:
+                    logger.error(f"좌표 기반 클릭 실패: {coord_error}")
+                    return False
+            
+            # 신규상품등록 화면 로드 대기 (5초)
+            logger.info("신규상품등록 화면 로드 대기 - 5초")
+            time.sleep(5)
+            
+            # 스크롤 위치 초기화
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            logger.info("스크롤 위치를 최상단으로 초기화했습니다")
+            
+            logger.info("신규상품등록 화면이 성공적으로 열렸습니다.")
+            return True
+            
+        except Exception as e:
+            logger.error(f"신규상품등록 메뉴 클릭 중 오류 발생: {e}")
+            return False
+    
     def run_step1_automation(self):
         """
-        6단계 자동화 실행: 그룹상품관리 화면 열기
+        6단계 자동화 실행: 신규상품등록 화면 열기
         """
         try:
             logger.info("===== 퍼센티 상품 수정 자동화 6단계 시작 =====")
             
-            # 그룹상품관리 메뉴 클릭
-            logger.info("그룹상품관리 메뉴 클릭 시도")
-            if not self.click_product_group():
-                logger.error("그룹상품관리 메뉴 클릭 실패, 자동화를 중단합니다.")
+            # 신규상품등록 메뉴 클릭
+            logger.info("신규상품등록 메뉴 클릭 시도")
+            if not self.click_product_register():
+                logger.error("신규상품등록 메뉴 클릭 실패, 자동화를 중단합니다.")
                 return False
-            logger.info("그룹상품관리 메뉴 클릭 완료")
+            logger.info("신규상품등록 메뉴 클릭 완료")
             
-            # 로직은 여기서 계속 구현될 예정
-            logger.info("그룹상품관리 화면이 열렸습니다.")
-            logger.info("다음 단계 작업을 위한 준비가 완료되었습니다.")
+            # 6-1단계 워크플로우 실행
+            logger.info("6-1단계 워크플로우 시작")
+            if not self.product_editor_core6_1.execute_step6_1_workflow():
+                logger.warning("6-1단계 워크플로우 실행 실패")
+                return False
+            
+            logger.info("신규상품등록 화면이 열렸습니다.")
+            logger.info("6-1단계 자동화가 성공적으로 완료되었습니다.")
             
             return True
             
