@@ -55,7 +55,15 @@ cd c:\Projects\percenty_project
 python percenty_gui_advanced.py
 python core/steps/step5_1_core.py
 python cli/batch_cli.py multi-batch 1 2 3
+pip install -r requirements.txt
+
+1. 원격변경사항 가져오기 git pull origin main
+2. 다시 푸시 git push origin main 또는 git push --force-with-lease origin main (주의 필요)
+3. 커밋 진행 C:\Projects\percenty_project\git\git_commit_all.bat
 
 taskkill /F /IM python.exe
 강제종료: Ctrl C
 
+>> 주기적실행 타임아웃 예방, 브라우저 강제 종료
+c:\Projects\percenty_project>pip install psutil>=5.9.0
+pip show psutil

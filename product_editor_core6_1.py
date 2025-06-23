@@ -53,7 +53,10 @@ class ProductEditorCore6_1:
         """
         try:
             logger.info("6-1단계 워크플로우 시작")
-            
+
+            # 0. 마켓설정 화면 정보 처리
+            logger.info("마켓설정 화면 정보 처리")
+
             # 1. 상품검색 드롭박스를 열고 쇼핑몰A1 그룹 선택
             if not self._select_shopping_mall_a1_group():
                 logger.error("쇼핑몰A1 그룹 선택 실패")
