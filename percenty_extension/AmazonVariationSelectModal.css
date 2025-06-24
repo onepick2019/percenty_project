@@ -1,0 +1,17 @@
+.AmazonVariationSelectModalRoot {
+    position: fixed;
+    right: 10em;
+    top: 1em;
+    z-index: 9000000000;
+    background: transparent;
+    border: #1B00AE solid medium;
+    box-shadow: 0 0 30px #A6A6A6;
+    -moz-box-shadow: 0 0 30px #A6A6A6;
+    -webkit-box-shadow: 0 0 30px #A6A6A6;
+    font-weight: bold;
+    border-radius: 8px;
+    padding: 0;
+    width: 20em;
+    height: 30em;
+    font-size: 16px;
+}

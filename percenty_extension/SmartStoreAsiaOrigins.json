@@ -1,0 +1,541 @@
+[
+  {
+    "code": "0200000",
+    "name": "그루지야",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200000"
+    ]
+  },
+  {
+    "code": "0200001",
+    "name": "네팔",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200001"
+    ]
+  },
+  {
+    "code": "0200002",
+    "name": "대만",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200002"
+    ]
+  },
+  {
+    "code": "0200003",
+    "name": "동티모르",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200003"
+    ]
+  },
+  {
+    "code": "0200004",
+    "name": "라오스",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200004"
+    ]
+  },
+  {
+    "code": "0200005",
+    "name": "레바논",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200005"
+    ]
+  },
+  {
+    "code": "0200006",
+    "name": "리비아",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200006"
+    ]
+  },
+  {
+    "code": "0200007",
+    "name": "마카오",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200007"
+    ]
+  },
+  {
+    "code": "0200008",
+    "name": "말레이시아",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200008"
+    ]
+  },
+  {
+    "code": "0200009",
+    "name": "몰디브",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200009"
+    ]
+  },
+  {
+    "code": "0200010",
+    "name": "몽골",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200010"
+    ]
+  },
+  {
+    "code": "0200011",
+    "name": "미얀마",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200011"
+    ]
+  },
+  {
+    "code": "0200012",
+    "name": "바레인",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200012"
+    ]
+  },
+  {
+    "code": "0200013",
+    "name": "방글라데시",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200013"
+    ]
+  },
+  {
+    "code": "0200014",
+    "name": "베트남",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200014"
+    ]
+  },
+  {
+    "code": "0200015",
+    "name": "부탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200015"
+    ]
+  },
+  {
+    "code": "0200016",
+    "name": "북한",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200016"
+    ]
+  },
+  {
+    "code": "0200017",
+    "name": "브루나이",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200017"
+    ]
+  },
+  {
+    "code": "0200018",
+    "name": "사우디아라비아",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200018"
+    ]
+  },
+  {
+    "code": "0200019",
+    "name": "스리랑카",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200019"
+    ]
+  },
+  {
+    "code": "0200020",
+    "name": "시리아",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200020"
+    ]
+  },
+  {
+    "code": "0200021",
+    "name": "싱가포르",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200021"
+    ]
+  },
+  {
+    "code": "0200022",
+    "name": "아랍에미리트",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200022"
+    ]
+  },
+  {
+    "code": "0200023",
+    "name": "아르메니아",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200023"
+    ]
+  },
+  {
+    "code": "0200024",
+    "name": "아프가니스탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200024"
+    ]
+  },
+  {
+    "code": "0200025",
+    "name": "예멘",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200025"
+    ]
+  },
+  {
+    "code": "0200026",
+    "name": "오만",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200026"
+    ]
+  },
+  {
+    "code": "0200027",
+    "name": "요르단",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200027"
+    ]
+  },
+  {
+    "code": "0200028",
+    "name": "우즈베키스탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200028"
+    ]
+  },
+  {
+    "code": "0200030",
+    "name": "이라크",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200030"
+    ]
+  },
+  {
+    "code": "0200031",
+    "name": "이란",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200031"
+    ]
+  },
+  {
+    "code": "0200032",
+    "name": "이스라엘",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200032"
+    ]
+  },
+  {
+    "code": "0200033",
+    "name": "인도",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200033"
+    ]
+  },
+  {
+    "code": "0200034",
+    "name": "인도네시아",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200034"
+    ]
+  },
+  {
+    "code": "0200035",
+    "name": "인도양식민지",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200035"
+    ]
+  },
+  {
+    "code": "0200036",
+    "name": "일본",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200036"
+    ]
+  },
+  {
+    "code": "0200037",
+    "name": "중국",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200037"
+    ]
+  },
+  {
+    "code": "0200038",
+    "name": "카자흐스탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200038"
+    ]
+  },
+  {
+    "code": "0200039",
+    "name": "카타르",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200039"
+    ]
+  },
+  {
+    "code": "0200040",
+    "name": "캄보디아",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200040"
+    ]
+  },
+  {
+    "code": "0200041",
+    "name": "쿠웨이트",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200041"
+    ]
+  },
+  {
+    "code": "0200042",
+    "name": "키리기스스탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200042"
+    ]
+  },
+  {
+    "code": "0200043",
+    "name": "타지키스탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200043"
+    ]
+  },
+  {
+    "code": "0200044",
+    "name": "태국",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200044"
+    ]
+  },
+  {
+    "code": "0200045",
+    "name": "투르크메니스탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200045"
+    ]
+  },
+  {
+    "code": "0200046",
+    "name": "티베트",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200046"
+    ]
+  },
+  {
+    "code": "0200047",
+    "name": "파키스탄",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200047"
+    ]
+  },
+  {
+    "code": "0200048",
+    "name": "필리핀",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200048"
+    ]
+  },
+  {
+    "code": "0200049",
+    "name": "홍콩",
+    "usable": true,
+    "parentCode": "0200",
+    "wholeCodes": [
+      "02",
+      "0200",
+      "0200049"
+    ]
+  }
+]

@@ -1,0 +1,212 @@
+.shadow-toast {
+    position: fixed;
+    padding: 8px 12px;
+    border-radius: 5px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    background-color: white;
+    z-index: 99999;
+    animation-duration: 100ms;
+    animation-fill-mode: forwards;
+}
+
+/*top left*/
+.shadow-toast.top-left {
+    top: 16px;
+    left: 16px;
+    transform: translate(0, -1000%);
+}
+
+.shadow-toast.top-left.show {
+    animation-name: toastInTopLeft;
+}
+
+.shadow-toast.top-left.hide {
+    animation-name: toastOutTopLeft;
+}
+
+/*top right*/
+.shadow-toast.top-right {
+    top: 16px;
+    right: 16px;
+    transform: translate(0, -1000%);
+}
+.shadow-toast.top-right.show {
+    animation-name: toastInTopRight
+}
+.shadow-toast.top-right.hide {
+    animation-name: toastOutTopRight;
+}
+
+/*top center*/
+.shadow-toast.top-center {
+    top: 16px;
+    left: 50%;
+    transform: translate(-50%, -1000%);
+}
+.shadow-toast.top-center.show {
+    animation-name: toastInTopCenter
+}
+.shadow-toast.top-center.hide {
+    animation-name: toastOutTopCenter;
+}
+
+/*bottom left*/
+.shadow-toast.bottom-left {
+    bottom: 16px;
+    left: 16px;
+    transform: translate(0, 1000%);
+}
+.shadow-toast.bottom-left.show {
+    animation-name: toastInBottomLeft;
+}
+.shadow-toast.bottom-left.hide {
+    animation-name: toastOutBottomLeft;
+}
+
+/*bottom right*/
+.shadow-toast.bottom-right {
+    bottom: 16px;
+    right: 16px;
+    transform: translate(0, 1000%);
+}
+.shadow-toast.bottom-right.show {
+    animation-name: toastInBottomRight;
+}
+.shadow-toast.bottom-right.hide {
+    animation-name: toastOutBottomRight;
+}
+
+/*bottom center*/
+.shadow-toast.bottom-center {
+    bottom: 16px;
+    left: 50%;
+    transform: translate(-50%, 1000%);
+}
+.shadow-toast.bottom-center.show {
+    animation-name: toastInBottomCenter;
+}
+.shadow-toast.bottom-center.hide {
+    animation-name: toastOutBottomCenter;
+}
+
+/*keyframes*/
+@keyframes toastInTopLeft {
+    from {
+        opacity: 0;
+        transform: translate(0, -100%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+}
+@keyframes toastOutTopLeft {
+    from {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+    to {
+        opacity: 0;
+        transform: translate(0, -100%);
+    }
+}
+@keyframes toastInTopRight {
+    from {
+        opacity: 0;
+        transform: translate(0, -100%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+}
+@keyframes toastOutTopRight {
+    from {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+    to {
+        opacity: 0;
+        transform: translate(0, -100%);
+    }
+}
+@keyframes toastInTopCenter {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -100%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+@keyframes toastOutTopCenter {
+    from {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+    to {
+        opacity: 0;
+        transform: translate(-50%, -100%);
+    }
+}
+@keyframes toastInBottomLeft {
+    from {
+        opacity: 0;
+        transform: translate(0, 100%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+}
+@keyframes toastOutBottomLeft {
+    from {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+    to {
+        opacity: 0;
+        transform: translate(0, 100%);
+    }
+}
+@keyframes toastInBottomRight {
+    from {
+        opacity: 0;
+        transform: translate(0, 100%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+}
+@keyframes toastOutBottomRight {
+    from {
+        opacity: 1;
+        transform: translate(0, 0);
+    }
+    to {
+        opacity: 0;
+        transform: translate(0, 100%);
+    }
+}
+@keyframes toastInBottomCenter {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 100%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+@keyframes toastOutBottomCenter {
+    from {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+    to {
+        opacity: 0;
+        transform: translate(-50%, 100%);
+    }
+}

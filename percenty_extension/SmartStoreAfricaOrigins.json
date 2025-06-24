@@ -1,0 +1,651 @@
+[
+  {
+    "code": "0202000",
+    "name": "가나",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202000"
+    ]
+  },
+  {
+    "code": "0202001",
+    "name": "가봉",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202001"
+    ]
+  },
+  {
+    "code": "0202002",
+    "name": "가이아나",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202002"
+    ]
+  },
+  {
+    "code": "0202003",
+    "name": "감비아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202003"
+    ]
+  },
+  {
+    "code": "0202004",
+    "name": "기니",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202004"
+    ]
+  },
+  {
+    "code": "0202005",
+    "name": "기니비사우",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202005"
+    ]
+  },
+  {
+    "code": "0202006",
+    "name": "나미비아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202006"
+    ]
+  },
+  {
+    "code": "0202007",
+    "name": "나이지리아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202007"
+    ]
+  },
+  {
+    "code": "0202008",
+    "name": "남아프리카공화국",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202008"
+    ]
+  },
+  {
+    "code": "0202009",
+    "name": "니제르",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202009"
+    ]
+  },
+  {
+    "code": "0202010",
+    "name": "라이베리아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202010"
+    ]
+  },
+  {
+    "code": "0202011",
+    "name": "레소토",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202011"
+    ]
+  },
+  {
+    "code": "0202012",
+    "name": "르완다",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202012"
+    ]
+  },
+  {
+    "code": "0202013",
+    "name": "마다가스카르",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202013"
+    ]
+  },
+  {
+    "code": "0202014",
+    "name": "마르티니크",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202014"
+    ]
+  },
+  {
+    "code": "0202015",
+    "name": "말라위",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202015"
+    ]
+  },
+  {
+    "code": "0202016",
+    "name": "말리",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202016"
+    ]
+  },
+  {
+    "code": "0202017",
+    "name": "모로코",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202017"
+    ]
+  },
+  {
+    "code": "0202018",
+    "name": "모리셔스",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202018"
+    ]
+  },
+  {
+    "code": "0202019",
+    "name": "모리타니",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202019"
+    ]
+  },
+  {
+    "code": "0202020",
+    "name": "모잠비크",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202020"
+    ]
+  },
+  {
+    "code": "0202021",
+    "name": "베냉",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202021"
+    ]
+  },
+  {
+    "code": "0202022",
+    "name": "보츠와나",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202022"
+    ]
+  },
+  {
+    "code": "0202023",
+    "name": "부룬디",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202023"
+    ]
+  },
+  {
+    "code": "0202024",
+    "name": "부르키나파소",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202024"
+    ]
+  },
+  {
+    "code": "0202025",
+    "name": "사오토메프린시페",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202025"
+    ]
+  },
+  {
+    "code": "0202026",
+    "name": "상투메 프린시페",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202026"
+    ]
+  },
+  {
+    "code": "0202027",
+    "name": "서사하라",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202027"
+    ]
+  },
+  {
+    "code": "0202028",
+    "name": "세네갈",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202028"
+    ]
+  },
+  {
+    "code": "0202029",
+    "name": "세이셀",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202029"
+    ]
+  },
+  {
+    "code": "0202030",
+    "name": "소말리아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202030"
+    ]
+  },
+  {
+    "code": "0202031",
+    "name": "수단",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202031"
+    ]
+  },
+  {
+    "code": "0202032",
+    "name": "스와질랜드",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202032"
+    ]
+  },
+  {
+    "code": "0202033",
+    "name": "시에라리온",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202033"
+    ]
+  },
+  {
+    "code": "0202034",
+    "name": "알제리",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202034"
+    ]
+  },
+  {
+    "code": "0202035",
+    "name": "앙골라",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202035"
+    ]
+  },
+  {
+    "code": "0202037",
+    "name": "에리트리아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202037"
+    ]
+  },
+  {
+    "code": "0202036",
+    "name": "에티오피아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202036"
+    ]
+  },
+  {
+    "code": "0202038",
+    "name": "우간다",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202038"
+    ]
+  },
+  {
+    "code": "0202039",
+    "name": "이집트",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202039"
+    ]
+  },
+  {
+    "code": "0202040",
+    "name": "잠비아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202040"
+    ]
+  },
+  {
+    "code": "0202041",
+    "name": "적도기니공화국",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202041"
+    ]
+  },
+  {
+    "code": "0202042",
+    "name": "중앙아프리카공화국",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202042"
+    ]
+  },
+  {
+    "code": "0202043",
+    "name": "지부티",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202043"
+    ]
+  },
+  {
+    "code": "0202044",
+    "name": "지브롤터",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202044"
+    ]
+  },
+  {
+    "code": "0202045",
+    "name": "짐바브웨",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202045"
+    ]
+  },
+  {
+    "code": "0202046",
+    "name": "차드",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202046"
+    ]
+  },
+  {
+    "code": "0202047",
+    "name": "카메룬",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202047"
+    ]
+  },
+  {
+    "code": "0202048",
+    "name": "카보베르데",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202048"
+    ]
+  },
+  {
+    "code": "0202049",
+    "name": "케냐",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202049"
+    ]
+  },
+  {
+    "code": "0202050",
+    "name": "코모로",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202050"
+    ]
+  },
+  {
+    "code": "0202051",
+    "name": "코모로스",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202051"
+    ]
+  },
+  {
+    "code": "0202052",
+    "name": "코트디브와르",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202052"
+    ]
+  },
+  {
+    "code": "0202053",
+    "name": "콩고",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202053"
+    ]
+  },
+  {
+    "code": "0202054",
+    "name": "콩고민주공화국",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202054"
+    ]
+  },
+  {
+    "code": "0202055",
+    "name": "탄자니아",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202055"
+    ]
+  },
+  {
+    "code": "0202056",
+    "name": "터크스앤카이코스제도",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202056"
+    ]
+  },
+  {
+    "code": "0202057",
+    "name": "토고",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202057"
+    ]
+  },
+  {
+    "code": "0202058",
+    "name": "튀니지",
+    "usable": true,
+    "parentCode": "0202",
+    "wholeCodes": [
+      "02",
+      "0202",
+      "0202058"
+    ]
+  }
+]

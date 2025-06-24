@@ -1,0 +1,8 @@
+.P_CLASS_CAPTCHA_WARNING_MODAL_CONTAINER {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 2000000000;
+    background: transparent;
+}

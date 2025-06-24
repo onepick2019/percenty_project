@@ -1,0 +1,1 @@
+(()=>{"use strict";var r={},t={};function e(n){var o=t[n];if(void 0!==o)return o.exports;var u=t[n]={exports:{}};return r[n](u,u.exports,e),u.exports}e.nc=void 0,e.rv=function(){return"1.0.0-beta.3"},e.ruid="bundler=rspack@1.0.0-beta.3",e.nc="CSP_NONCE_PLACEHOLDER"})();

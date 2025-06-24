@@ -108,10 +108,10 @@ def main():
         
         print("✅ 신규상품등록 화면 전환 성공!")
         
-        # 11. 동적 업로드 워크플로우 실행 (통합된 12번 순환 처리)
+        # 11. 동적 업로드 워크플로우 실행
         print("\n11. 동적 업로드 워크플로우 실행...")
         print("    percenty_id.xlsx의 market_id 시트를 기반으로 12번 순환 업로드를 진행합니다.")
-        print("    각 설정별로 마켓 설정 → 그룹 선택 → 상품 업로드 과정을 반복합니다.")
+        print("    각 설정별로 그룹 선택 → 상품 업로드 과정을 반복합니다.")
         
         if dynamic_core.execute_dynamic_upload_workflow():
             print("\n" + "=" * 60)

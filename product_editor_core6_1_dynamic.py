@@ -66,14 +66,55 @@ class ProductEditorCore6_1Dynamic:
             # 각 행의 데이터를 딕셔너리로 변환하여 리스트로 반환
             market_configs = []
             for idx, row in account_rows.iterrows():
+                # 안전한 값 추출 함수
+                def safe_get(value):
+                    if pd.isna(value) or value is None:
+                        return ''
+                    return str(value).strip()
+                
                 config = {
-                    'id': row.get('id', ''),
-                    'groupname': row.get('groupname', ''),  # B열
-                    '11store_api': row.get('11store_api', ''),  # C열
+                    'id': safe_get(row.get('id', '')),
+                    'groupname': safe_get(row.get('groupname', '')),  # B열
+                    '11store_api': safe_get(row.get('11store_api', '')),  # C열
+                    '11global_api': safe_get(row.get('11global_api', '')),  # D열
+                    'auction_id': safe_get(row.get('auction_id', '')),  # E열
+                    'gmarket_id': safe_get(row.get('gmarket_id', '')),  # F열
+                    'talkstore_api': safe_get(row.get('talkstore_api', '')),  # G열
+                    'talkstore_url': safe_get(row.get('talkstore_url', '')),  # H열
+                    'smartstore_api': safe_get(row.get('smartstore_api', '')),  # I열
+                    'smartstore_id': safe_get(row.get('smartstore_id', '')),  # J열
+                    'coupang_id': safe_get(row.get('coupang_id', '')),  # K열
+                    'coupang_code': safe_get(row.get('coupang_code', '')),  # L열
+                    'coupang_access': safe_get(row.get('coupang_access', '')),  # M열
+                    'coupang_secret': safe_get(row.get('coupang_secret', '')),  # N열
                     'row_index': idx + 1  # 행 번호 (1부터 시작)
                 }
                 market_configs.append(config)
-                logger.info(f"마켓 설정 {idx+1}: 그룹명={config['groupname']}, API키={config['11store_api'][:10]}...")
+                # 모든 API 키 정보를 로그에 출력
+                api_info = []
+                if config['11store_api']:
+                    api_info.append(f"11번가일반API={config['11store_api'][:10]}...")
+                if config['11global_api']:
+                    api_info.append(f"11번가글로벌API={config['11global_api'][:10]}...")
+                if config['auction_id']:
+                    api_info.append(f"옥션ID={config['auction_id']}")
+                if config['gmarket_id']:
+                    api_info.append(f"지마켓ID={config['gmarket_id']}")
+                if config['talkstore_api']:
+                    api_info.append(f"톡스토어API={config['talkstore_api'][:10]}...")
+                if config['talkstore_url']:
+                    api_info.append(f"톡스토어URL={config['talkstore_url'][:30]}...")
+                if config['smartstore_api']:
+                    api_info.append(f"스마트스토어API={config['smartstore_api']}")
+                if config['smartstore_id']:
+                    api_info.append(f"스마트스토어ID={config['smartstore_id']}")
+                if config['coupang_id']:
+                    api_info.append(f"쿠팡ID={config['coupang_id']}")
+                if config['coupang_access']:
+                    api_info.append(f"쿠팡ACCESS={config['coupang_access'][:10]}...")
+                
+                api_info_str = ", ".join(api_info) if api_info else "API 키 없음"
+                logger.info(f"마켓 설정 {idx+1}: 그룹명={config['groupname']}, {api_info_str}")
             
             return market_configs
             
@@ -83,7 +124,7 @@ class ProductEditorCore6_1Dynamic:
     
     def setup_market_configuration(self, market_config):
         """
-        마켓 설정 화면에서 11번가 API 설정을 진행합니다.
+        마켓 설정 화면에서 모든 마켓 API 설정을 진행합니다.
         
         Args:
             market_config (dict): 마켓 설정 정보
@@ -99,27 +140,73 @@ class ProductEditorCore6_1Dynamic:
                 logger.error("마켓설정 화면 열기 실패")
                 return False
             
-            # 2. 모든 마켓 API 연결 끊기 (11번가만 사용하기 위해)
+            # 2. 모든 마켓 API 연결 끊기
             if not self._disconnect_all_market_apis():
                 logger.error("마켓 API 연결 끊기 실패")
                 return False
             
-            # 3. 11번가-일반 탭 선택
-            if not self.market_utils.click_market_tab('11st_general'):
-                logger.error("11번가-일반 탭 선택 실패")
+            # 3. 각 마켓별 API 키 입력 (키값이 있는 경우에만)
+            api_setup_success = False
+            
+            # 3-1. 11번가 API KEY 입력
+            api_key_11st = market_config.get('11store_api', '')
+            if api_key_11st:
+                if self._input_11st_api_key(api_key_11st):
+                    logger.info("11번가 API KEY 입력 성공")
+                    api_setup_success = True
+                else:
+                    logger.error("11번가 API KEY 입력 실패")
+            
+            # 3-2. 톡스토어 API KEY 입력
+            talkstore_api_key = market_config.get('talkstore_api', '')
+            talkstore_store_url = market_config.get('talkstore_url', '')
+            logger.info(f"톡스토어 API 키 확인: API키={talkstore_api_key[:10] if talkstore_api_key else 'N/A'}..., URL={talkstore_store_url[:30] if talkstore_store_url else 'N/A'}...")
+            
+            if talkstore_api_key and talkstore_store_url:
+                logger.info("톡스토어 API 키 입력 시도 시작")
+                if self._input_talkstore_api_keys(talkstore_api_key, talkstore_store_url):
+                    logger.info("톡스토어 API 키 입력 성공")
+                    api_setup_success = True
+                else:
+                    logger.error("톡스토어 API 키 입력 실패")
+            else:
+                logger.info("톡스토어 API 키 또는 URL이 없어서 입력을 건너뜁니다.")
+            
+            # 11번가-글로벌 API 키 입력
+            global_11st_api_key = market_config.get('11global_api', '')
+            logger.info(f"11번가-글로벌 API 키 확인: {global_11st_api_key[:10] if global_11st_api_key else 'N/A'}...")
+            
+            if global_11st_api_key:
+                logger.info("11번가-글로벌 API 키 입력 시도 시작")
+                if self._input_11st_global_api_key(global_11st_api_key):
+                    logger.info("11번가-글로벌 API 키 입력 성공")
+                    api_setup_success = True
+                else:
+                    logger.error("11번가-글로벌 API 키 입력 실패")
+            else:
+                logger.info("11번가-글로벌 API 키가 없어서 입력을 건너뜁니다.")
+            
+            # 옥션/G마켓 API 키 입력
+            auction_api_key = market_config.get('auction_id', '')
+            gmarket_api_key = market_config.get('gmarket_id', '')
+            logger.info(f"옥션/G마켓 API 키 확인: 옥션={auction_api_key[:10] if auction_api_key else 'N/A'}..., G마켓={gmarket_api_key[:10] if gmarket_api_key else 'N/A'}...")
+            
+            if auction_api_key and gmarket_api_key:
+                logger.info("옥션/G마켓 API 키 입력 시도 시작")
+                if self._input_auction_gmarket_api_keys(auction_api_key, gmarket_api_key):
+                    logger.info("옥션/G마켓 API 키 입력 성공")
+                    api_setup_success = True
+                else:
+                    logger.error("옥션/G마켓 API 키 입력 실패")
+            else:
+                logger.info("옥션/G마켓 API 키가 없어서 입력을 건너뜁니다.")
+            
+            # API 키가 하나도 설정되지 않은 경우
+            if not api_setup_success:
+                logger.warning("설정된 API 키가 없습니다.")
                 return False
             
-            # 4. API KEY 입력
-            if not self._input_11st_api_key(market_config['11store_api']):
-                logger.error("11번가 API KEY 입력 실패")
-                return False
-            
-            # 5. API 검증 진행
-            if not self.market_utils.perform_complete_11st_api_verification_workflow():
-                logger.error("11번가 API 검증 실패")
-                return False
-            
-            logger.info("마켓 설정 화면 정보 처리 완료")
+            logger.info(f"마켓 설정 화면 정보 처리 완료 - 그룹: {market_config['groupname']}")
             return True
             
         except Exception as e:
@@ -209,7 +296,8 @@ class ProductEditorCore6_1Dynamic:
                     else:
                         logger.warning(f"{market} API 연결 끊기 실패")
                     
-                    time.sleep(1)
+                    # 마켓 간 DOM 안정화를 위한 대기 시간 증가
+                    time.sleep(2)
                 except Exception as e:
                     logger.warning(f"{market} API 연결 끊기 중 오류 (무시하고 계속): {e}")
                     continue
@@ -234,18 +322,187 @@ class ProductEditorCore6_1Dynamic:
         try:
             logger.info("11번가 API KEY 입력 시작")
             
-            # market_utils의 메서드를 사용하여 API KEY 입력
-            success = self.market_utils.input_11st_general_api_key(api_key)
+            # 1. 11번가-일반 탭으로 전환
+            if not self.market_utils.switch_to_market('11st_general'):
+                logger.error("11번가-일반 탭 전환 실패")
+                return False
             
-            if success:
-                logger.info(f"11번가 API KEY 입력 완료: {api_key[:10]}...")
-                return True
+            # 2. 11번가 패널 로드 대기
+            if not self.market_utils.wait_for_market_panel_load('11st_general'):
+                logger.error("11번가 패널 로드 실패")
+                return False
+            
+            # 3. API KEY 입력
+            if self.market_utils.input_11st_general_api_key(api_key):
+                logger.info("11번가 API KEY 입력 성공")
+                
+                # 4. API 검증 진행
+                if self.market_utils.perform_complete_11st_api_verification_workflow():
+                    logger.info("11번가 API 검증 성공")
+                    return True
+                else:
+                    logger.error("11번가 API 검증 실패")
+                    return False
             else:
                 logger.error("11번가 API KEY 입력 실패")
                 return False
                 
         except Exception as e:
             logger.error(f"11번가 API KEY 입력 중 오류 발생: {e}")
+            return False
+    
+    def _input_talkstore_api_keys(self, api_key, store_url):
+        """
+        톡스토어 API KEY와 스토어 URL을 입력합니다.
+        
+        Args:
+            api_key (str): 톡스토어 API KEY (G열)
+            store_url (str): 톡스토어 주소 (H열)
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("톡스토어 API 키 입력 시작")
+            
+            # 1. 톡스토어 탭으로 전환
+            if not self.market_utils.switch_to_market('kakao'):
+                logger.error("톡스토어 탭 전환 실패")
+                return False
+            
+            # 2. 톡스토어 패널 로드 대기
+            if not self.market_utils.wait_for_market_panel_load('kakao'):
+                logger.error("톡스토어 패널 로드 실패")
+                return False
+            
+            # 3. API Key 입력 (첫 번째 입력창)
+            try:
+                api_key_selector = 'div[id="rc-tabs-0-panel-kakao"] input[placeholder="미설정"]:first-of-type'
+                api_key_element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, api_key_selector)))
+                
+                if not api_key_element.is_displayed() or not api_key_element.is_enabled():
+                    logger.error("톡스토어 API Key 입력창이 비활성화됨")
+                    return False
+                
+                api_key_element.clear()
+                api_key_element.send_keys(api_key)
+                logger.info(f"톡스토어 API Key 입력 완료: {api_key[:10]}...")
+                
+            except Exception as e:
+                logger.error(f"톡스토어 API Key 입력 실패: {e}")
+                return False
+            
+            # 4. 톡스토어 주소 입력 (두 번째 입력창)
+            try:
+                store_url_selector = 'div[id="rc-tabs-0-panel-kakao"] input[placeholder*="https://store.kakao.com"]'
+                store_url_element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, store_url_selector)))
+                
+                if not store_url_element.is_displayed() or not store_url_element.is_enabled():
+                    logger.error("톡스토어 주소 입력창이 비활성화됨")
+                    return False
+                
+                store_url_element.clear()
+                store_url_element.send_keys(store_url)
+                logger.info(f"톡스토어 주소 입력 완료: {store_url}")
+                
+            except Exception as e:
+                logger.error(f"톡스토어 주소 입력 실패: {e}")
+                return False
+            
+            # 5. API 검증 버튼 클릭
+            if self.market_utils.click_api_validation_button():
+                logger.info("톡스토어 API 검증 성공")
+                time.sleep(2)  # 검증 완료 대기
+                return True
+            else:
+                logger.error("톡스토어 API 검증 실패")
+                return False
+                
+        except Exception as e:
+            logger.error(f"톡스토어 API 키 입력 중 오류 발생: {e}")
+            return False
+    
+    def _input_11st_global_api_key(self, api_key):
+        """
+        11번가-글로벌 API KEY를 입력합니다.
+        
+        Args:
+            api_key (str): API 키
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("11번가-글로벌 API KEY 입력 시작")
+            
+            # 1. 11번가-글로벌 탭으로 전환
+            if not self.market_utils.switch_to_market('11st_global'):
+                logger.error("11번가-글로벌 탭 전환 실패")
+                return False
+            
+            # 2. 11번가-글로벌 패널 로드 대기
+            if not self.market_utils.wait_for_market_panel_load('11st_global'):
+                logger.error("11번가-글로벌 패널 로드 실패")
+                return False
+            
+            # 3. API KEY 입력
+            if self.market_utils.input_11st_global_api_key(api_key):
+                logger.info("11번가-글로벌 API KEY 입력 성공")
+                
+                # 4. API 검증 진행
+                if self.market_utils.click_api_validation_button():
+                    logger.info("11번가-글로벌 API 검증 성공")
+                    time.sleep(2)  # 검증 완료 대기
+                    return True
+                else:
+                    logger.error("11번가-글로벌 API 검증 실패")
+                    return False
+            else:
+                logger.error("11번가-글로벌 API KEY 입력 실패")
+                return False
+                
+        except Exception as e:
+            logger.error(f"11번가-글로벌 API KEY 입력 중 오류 발생: {e}")
+            return False
+    
+    def _input_auction_gmarket_api_keys(self, auction_api_key, gmarket_api_key):
+        """
+        옥션/G마켓 API KEY를 입력합니다.
+        
+        Args:
+            auction_api_key (str): 옥션 API 키
+            gmarket_api_key (str): G마켓 API 키
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("옥션/G마켓 API KEY 입력 시작")
+            
+            # API KEY 입력 (탭 전환과 패널 로드는 input_auction_gmarket_api_keys 메서드에서 처리)
+            if self.market_utils.input_auction_gmarket_api_keys(auction_api_key, gmarket_api_key):
+                logger.info("옥션/G마켓 API KEY 입력 성공")
+                
+                # 4. API 검증 진행 (옥션/G마켓은 하나의 검증 프로세스로 처리)
+                if self.market_utils.click_api_validation_button():
+                    logger.info("옥션/G마켓 API 검증 버튼 클릭 성공")
+                    
+                    # 5. API 검증 모달창 처리
+                    if self.market_utils.handle_auction_gmarket_api_verification_modal():
+                        logger.info("옥션/G마켓 API 검증 성공")
+                        return True
+                    else:
+                        logger.error("옥션/G마켓 API 검증 모달창 처리 실패")
+                        return False
+                else:
+                    logger.error("옥션/G마켓 API 검증 버튼 클릭 실패")
+                    return False
+            else:
+                logger.error("옥션/G마켓 API KEY 입력 실패")
+                return False
+                
+        except Exception as e:
+            logger.error(f"옥션/G마켓 API KEY 입력 중 오류 발생: {e}")
             return False
     
     def _navigate_to_product_registration(self):
@@ -257,6 +514,12 @@ class ProductEditorCore6_1Dynamic:
         """
         try:
             logger.info("신규상품등록 화면으로 전환 시작")
+            
+            # 마켓설정 화면에서 DOM 간섭을 방지하기 위해 페이지 새로고침
+            logger.info("DOM 간섭 방지를 위한 페이지 새로고침 실행")
+            self.driver.refresh()
+            time.sleep(3)  # 새로고침 후 대기
+            logger.info("페이지 새로고침 완료")
             
             # DOM 선택자 - span.ant-menu-title-content 중에서 '신규 상품 등록' 텍스트를 가진 요소
             selectors = [
@@ -303,9 +566,29 @@ class ProductEditorCore6_1Dynamic:
         try:
             logger.info(f"동적 그룹 선택 시작: {group_name}")
             
-            # 상품검색 드롭박스에서 그룹 선택 (드롭박스 열기 + 그룹 선택 통합)
-            if not self.dropdown_utils.select_group_in_search_dropdown(group_name):
-                logger.error(f"그룹 선택 실패: {group_name}")
+            # 그룹 선택 시도 (최대 3회 재시도)
+            group_selection_success = False
+            for attempt in range(3):
+                try:
+                    logger.info(f"{group_name} 그룹 선택 시도 {attempt + 1}/3")
+                    
+                    # 상품검색용 드롭박스에서 그룹 선택
+                    if self.dropdown_utils.select_group_in_search_dropdown(group_name):
+                        logger.info(f"{group_name} 그룹 선택 성공")
+                        group_selection_success = True
+                        break
+                    else:
+                        logger.warning(f"{group_name} 그룹 선택 실패 (시도 {attempt + 1}/3)")
+                    
+                    if attempt < 2:
+                        time.sleep(2)  # 재시도 전 대기
+                        
+                except Exception as e:
+                    logger.error(f"{group_name} 그룹 선택 중 오류 (시도 {attempt + 1}/3): {e}")
+                    time.sleep(2)  # 재시도 전 대기
+            
+            if not group_selection_success:
+                logger.error(f"{group_name} 그룹 선택에 실패했습니다.")
                 return False
             
             logger.info(f"동적 그룹 선택 완료: {group_name}")
@@ -480,6 +763,12 @@ class ProductEditorCore6_1Dynamic:
             for idx, market_config in enumerate(market_configs, 1):
                 logger.info(f"=== 마켓 설정 {idx}/{len(market_configs)} 처리 시작 ===")
                 logger.info(f"그룹명: {market_config['groupname']}, API키: {market_config['11store_api'][:10]}...")
+                
+                # 두 번째 마켓부터 DOM 간섭 방지를 위한 페이지 새로고침
+                if idx > 1:
+                    logger.info("이전 마켓 설정 DOM 간섭 방지를 위해 페이지 새로고침")
+                    self.driver.refresh()
+                    time.sleep(5)  # 페이지 로드 대기
                 
                 # 2-1. 마켓 설정 화면 정보 처리
                 if not self.setup_market_configuration(market_config):

@@ -1,0 +1,453 @@
+[
+  {
+    "code": "0205000",
+    "name": "과델루페",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205000"
+    ]
+  },
+  {
+    "code": "0205001",
+    "name": "과테말라",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205001"
+    ]
+  },
+  {
+    "code": "0205002",
+    "name": "그레나다",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205002"
+    ]
+  },
+  {
+    "code": "0205003",
+    "name": "네비스",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205003"
+    ]
+  },
+  {
+    "code": "0205004",
+    "name": "니카라과",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205004"
+    ]
+  },
+  {
+    "code": "0205005",
+    "name": "도미니카",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205005"
+    ]
+  },
+  {
+    "code": "0205006",
+    "name": "도미니카공화국",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205006"
+    ]
+  },
+  {
+    "code": "0205007",
+    "name": "멕시코",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205007"
+    ]
+  },
+  {
+    "code": "0205008",
+    "name": "몬체라트",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205008"
+    ]
+  },
+  {
+    "code": "0205009",
+    "name": "바바도스",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205009"
+    ]
+  },
+  {
+    "code": "0205010",
+    "name": "바하마",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205010"
+    ]
+  },
+  {
+    "code": "0205011",
+    "name": "버뮤다",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205011"
+    ]
+  },
+  {
+    "code": "0205012",
+    "name": "베네수엘라",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205012"
+    ]
+  },
+  {
+    "code": "0205013",
+    "name": "벨리제",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205013"
+    ]
+  },
+  {
+    "code": "0205014",
+    "name": "볼리비아",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205014"
+    ]
+  },
+  {
+    "code": "0205015",
+    "name": "브라질",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205015"
+    ]
+  },
+  {
+    "code": "0205016",
+    "name": "브리티시 버진아일랜드",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205016"
+    ]
+  },
+  {
+    "code": "0205017",
+    "name": "세인트루시아",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205017"
+    ]
+  },
+  {
+    "code": "0205018",
+    "name": "수리남",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205018"
+    ]
+  },
+  {
+    "code": "0205019",
+    "name": "아루바",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205019"
+    ]
+  },
+  {
+    "code": "0205020",
+    "name": "아르헨티나",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205020"
+    ]
+  },
+  {
+    "code": "0205021",
+    "name": "아센션 이스난드",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205021"
+    ]
+  },
+  {
+    "code": "0205022",
+    "name": "안티구아",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205022"
+    ]
+  },
+  {
+    "code": "0205023",
+    "name": "앙길라",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205023"
+    ]
+  },
+  {
+    "code": "0205024",
+    "name": "에콰도르",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205024"
+    ]
+  },
+  {
+    "code": "0205025",
+    "name": "엘살바도르",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205025"
+    ]
+  },
+  {
+    "code": "0205026",
+    "name": "온두라스",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205026"
+    ]
+  },
+  {
+    "code": "0205027",
+    "name": "우루과이",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205027"
+    ]
+  },
+  {
+    "code": "0205028",
+    "name": "자메이카",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205028"
+    ]
+  },
+  {
+    "code": "0205029",
+    "name": "칠레",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205029"
+    ]
+  },
+  {
+    "code": "0205030",
+    "name": "코스타리카",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205030"
+    ]
+  },
+  {
+    "code": "0205031",
+    "name": "콜롬비아",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205031"
+    ]
+  },
+  {
+    "code": "0205032",
+    "name": "쿠바",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205032"
+    ]
+  },
+  {
+    "code": "0205033",
+    "name": "트리니다드토바고",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205033"
+    ]
+  },
+  {
+    "code": "0205034",
+    "name": "파나마",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205034"
+    ]
+  },
+  {
+    "code": "0205035",
+    "name": "파라과이",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205035"
+    ]
+  },
+  {
+    "code": "0205036",
+    "name": "페루",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205036"
+    ]
+  },
+  {
+    "code": "0205037",
+    "name": "포크랜드",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205037"
+    ]
+  },
+  {
+    "code": "0205038",
+    "name": "푸에르토리코",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205038"
+    ]
+  },
+  {
+    "code": "0205039",
+    "name": "프랑스령 기아나",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205039"
+    ]
+  },
+  {
+    "code": "0205040",
+    "name": "하이티",
+    "usable": true,
+    "parentCode": "0205",
+    "wholeCodes": [
+      "02",
+      "0205",
+      "0205040"
+    ]
+  }
+]

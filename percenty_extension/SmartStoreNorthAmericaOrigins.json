@@ -1,0 +1,79 @@
+[
+  {
+    "code": "0204000",
+    "name": "미국",
+    "usable": true,
+    "parentCode": "0204",
+    "wholeCodes": [
+      "02",
+      "0204",
+      "0204000"
+    ]
+  },
+  {
+    "code": "0204001",
+    "name": "바베이도스",
+    "usable": true,
+    "parentCode": "0204",
+    "wholeCodes": [
+      "02",
+      "0204",
+      "0204001"
+    ]
+  },
+  {
+    "code": "0204002",
+    "name": "세인트 빈센트 그레나딘",
+    "usable": true,
+    "parentCode": "0204",
+    "wholeCodes": [
+      "02",
+      "0204",
+      "0204002"
+    ]
+  },
+  {
+    "code": "0204003",
+    "name": "아이티",
+    "usable": true,
+    "parentCode": "0204",
+    "wholeCodes": [
+      "02",
+      "0204",
+      "0204003"
+    ]
+  },
+  {
+    "code": "0204004",
+    "name": "앤티가 바부다",
+    "usable": true,
+    "parentCode": "0204",
+    "wholeCodes": [
+      "02",
+      "0204",
+      "0204004"
+    ]
+  },
+  {
+    "code": "0204005",
+    "name": "유에스버진아일랜드",
+    "usable": true,
+    "parentCode": "0204",
+    "wholeCodes": [
+      "02",
+      "0204",
+      "0204005"
+    ]
+  },
+  {
+    "code": "0204006",
+    "name": "캐나다",
+    "usable": true,
+    "parentCode": "0204",
+    "wholeCodes": [
+      "02",
+      "0204",
+      "0204006"
+    ]
+  }
+]

@@ -52,7 +52,7 @@ class MarketUtils:
     
     def get_market_tab_by_text_selector(self, market_text):
         """마켓 텍스트로 탭 선택자를 반환합니다."""
-        return f'.ant-tabs-tab-btn:contains("{market_text}")'
+        return f'//button[contains(@class, "ant-tabs-tab-btn") and contains(text(), "{market_text}")]'
     
     def get_active_market_tab_selector(self):
         """현재 활성화된 마켓 탭의 선택자를 반환합니다."""
@@ -179,7 +179,7 @@ class MarketUtils:
         node_key = self.market_tabs[market_key]
         return f'div[id="rc-tabs-0-panel-{node_key}"]'
     
-    def wait_for_market_panel_load(self, market_key, timeout=10):
+    def wait_for_market_panel_load(self, market_key, timeout=15):
         """특정 마켓 패널이 로드될 때까지 대기합니다."""
         try:
             panel_selector = self.get_market_panel_selector(market_key)
@@ -225,7 +225,7 @@ class MarketUtils:
     
     def get_account_setting_button_selector(self):
         """업로드할 계정 설정하기 버튼 선택자를 반환합니다."""
-        return '.ant-btn.ant-btn-primary.ant-btn-background-ghost span:contains("업로드할 계정 설정하기")'
+        return '//button[contains(@class, "ant-btn-primary") and contains(@class, "ant-btn-background-ghost")]//span[contains(text(), "업로드할 계정 설정하기")]'
     
     def get_api_validation_button_selector(self):
         """API 검증 버튼 선택자를 반환합니다."""
@@ -297,7 +297,7 @@ class MarketUtils:
         """업로드할 계정 설정하기 버튼을 클릭합니다."""
         try:
             selector = self.get_account_setting_button_selector()
-            element = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+            element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
             element.click()
             self.logger.info("업로드할 계정 설정하기 버튼 클릭 완료")
             time.sleep(1)
@@ -428,6 +428,84 @@ class MarketUtils:
     def input_auction_gmarket_api_key(self, api_key):
         """옥션/G마켓 API KEY를 입력합니다."""
         return self.input_api_key('auction_gmarket', api_key)
+    
+    def input_auction_gmarket_api_keys(self, auction_api_key, gmarket_api_key):
+        """옥션/G마켓 두 개의 API KEY를 입력합니다.
+        
+        Args:
+            auction_api_key (str): 옥션 API 키 (첫 번째 입력창)
+            gmarket_api_key (str): G마켓 API 키 (두 번째 입력창)
+            
+        Returns:
+            bool: 입력 성공 여부
+        """
+        try:
+            self.logger.info("옥션/G마켓 API 키 입력 시작")
+            
+            # 옥션/G마켓 탭으로 전환
+            if not self.switch_to_market('auction_gmarket'):
+                return False
+            
+            # 패널 로드 대기
+            if not self.wait_for_market_panel_load('auction_gmarket'):
+                return False
+            
+            # 첫 번째 입력창 (옥션 ID) 찾기 및 입력
+            try:
+                # XPath를 사용하여 '옥션 ID' 텍스트 다음의 입력창 찾기
+                auction_input_xpath = "//div[contains(text(), '옥션 ID')]/following-sibling::input[@placeholder='미설정'] | //div[contains(text(), '옥션 ID')]/..//input[@placeholder='미설정']"
+                auction_input = self.wait.until(
+                    EC.element_to_be_clickable((By.XPATH, auction_input_xpath))
+                )
+                auction_input.clear()
+                auction_input.send_keys(auction_api_key)
+                self.logger.info("옥션 API 키 입력 완료")
+            except TimeoutException:
+                # 대체 선택자 시도 - 순서대로 입력창 찾기
+                try:
+                    auction_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[placeholder='미설정']")
+                    if len(auction_inputs) >= 2:
+                        auction_inputs[0].clear()
+                        auction_inputs[0].send_keys(auction_api_key)
+                        self.logger.info("옥션 API 키 입력 완료 (대체 선택자)")
+                    else:
+                        self.logger.error("옥션 API 키 입력창을 찾을 수 없습니다")
+                        return False
+                except Exception as e:
+                    self.logger.error(f"옥션 API 키 입력 중 오류: {e}")
+                    return False
+            
+            # 두 번째 입력창 (G마켓 ID) 찾기 및 입력
+            try:
+                # XPath를 사용하여 'G마켓 ID' 텍스트 다음의 입력창 찾기
+                gmarket_input_xpath = "//div[contains(text(), 'G마켓 ID')]/following-sibling::input[@placeholder='미설정'] | //div[contains(text(), 'G마켓 ID')]/..//input[@placeholder='미설정']"
+                gmarket_input = self.wait.until(
+                    EC.element_to_be_clickable((By.XPATH, gmarket_input_xpath))
+                )
+                gmarket_input.clear()
+                gmarket_input.send_keys(gmarket_api_key)
+                self.logger.info("G마켓 API 키 입력 완료")
+            except TimeoutException:
+                # 대체 선택자 시도 - 순서대로 입력창 찾기
+                try:
+                    gmarket_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[placeholder='미설정']")
+                    if len(gmarket_inputs) >= 2:
+                        gmarket_inputs[1].clear()
+                        gmarket_inputs[1].send_keys(gmarket_api_key)
+                        self.logger.info("G마켓 API 키 입력 완료 (대체 선택자)")
+                    else:
+                        self.logger.error("G마켓 API 키 입력창을 찾을 수 없습니다")
+                        return False
+                except Exception as e:
+                    self.logger.error(f"G마켓 API 키 입력 중 오류: {e}")
+                    return False
+            
+            self.logger.info("옥션/G마켓 API 키 입력 완료")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"옥션/G마켓 API 키 입력 중 오류 발생: {e}")
+            return False
     
     def input_lotteon_api_key(self, api_key):
         """롯데온 API KEY를 입력합니다."""
@@ -990,7 +1068,13 @@ class MarketUtils:
             # 3. 배송프로필 만들기 버튼 클릭
             if not self.click_11st_shipping_profile_create_button():
                 return False
-            
+
+            # 4. 화면 새로고침
+            self.logger.info("11번가 배송프로필 만들기 완료 후 화면 새로고침 시작")
+            self.driver.refresh()
+            time.sleep(3)  # 새로고침 후 페이지 로드 대기
+            self.logger.info("화면 새로고침 완료")
+
             self.logger.info("11번가 API 검증 모달창 처리 완료")
             return True
             
@@ -1022,11 +1106,11 @@ class MarketUtils:
     
     def get_auction_gmarket_api_verification_modal_selector(self):
         """옥션/G마켓 API 검증 모달창(드로어) 선택자를 반환합니다."""
-        return '.ant-drawer-content .ant-drawer-title:contains("옥션/G마켓 배송 프로필 추가")'
+        return '//div[contains(@class, "ant-drawer-title") and contains(text(), "옥션/G마켓 배송 프로필 추가")]'
     
     def get_auction_gmarket_shipping_profile_create_button_selector(self):
         """옥션/G마켓 배송프로필 만들기 버튼 선택자를 반환합니다."""
-        return '.ant-drawer-extra .ant-btn-primary span:contains("배송프로필 만들기")'
+        return '.ant-drawer-extra button.ant-btn.ant-btn-primary'
     
     def get_auction_gmarket_delivery_company_dropdown_selector(self):
         """옥션/G마켓 택배사 드롭다운 선택자를 반환합니다."""
@@ -1038,18 +1122,18 @@ class MarketUtils:
     
     def get_gmarket_site_discount_agree_button_selector(self):
         """G마켓 사이트할인 동의 버튼 선택자를 반환합니다."""
-        return '.ant-drawer-body .ant-radio-group:has(.sc-fqgwrq:contains("G마켓 사이트할인 동의")) .ant-radio-button-wrapper:has(span:contains("동의"))'
+        return '//div[contains(@class, "ant-drawer-body")]//div[contains(@class, "ant-radio-group") and .//div[contains(text(), "G마켓 사이트할인 동의")]]//label[contains(@class, "ant-radio-button-wrapper") and .//span[contains(text(), "동의")]]'
     
     def get_auction_site_discount_agree_button_selector(self):
         """옥션 사이트할인 동의 버튼 선택자를 반환합니다."""
-        return '.ant-drawer-body .ant-radio-group:has(.sc-fqgwrq:contains("옥션 사이트할인 동의")) .ant-radio-button-wrapper:has(span:contains("동의"))'
+        return '//div[contains(@class, "ant-drawer-body")]//div[contains(@class, "ant-radio-group") and .//div[contains(text(), "옥션 사이트할인 동의")]]//label[contains(@class, "ant-radio-button-wrapper") and .//span[contains(text(), "동의")]]'
     
     def wait_for_auction_gmarket_api_verification_modal(self, timeout=10):
         """옥션/G마켓 API 검증 모달창이 나타날 때까지 대기합니다."""
         try:
             modal_selector = self.get_auction_gmarket_api_verification_modal_selector()
             WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, modal_selector))
+                EC.presence_of_element_located((By.XPATH, modal_selector))
             )
             self.logger.info("옥션/G마켓 API 검증 모달창 확인")
             return True
@@ -1089,7 +1173,7 @@ class MarketUtils:
         """G마켓 사이트할인 동의 버튼을 클릭합니다."""
         try:
             selector = self.get_gmarket_site_discount_agree_button_selector()
-            element = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+            element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
             element.click()
             self.logger.info("G마켓 사이트할인 동의 버튼 클릭 완료")
             time.sleep(1)
@@ -1105,7 +1189,7 @@ class MarketUtils:
         """옥션 사이트할인 동의 버튼을 클릭합니다."""
         try:
             selector = self.get_auction_site_discount_agree_button_selector()
-            element = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+            element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
             element.click()
             self.logger.info("옥션 사이트할인 동의 버튼 클릭 완료")
             time.sleep(1)
@@ -1121,7 +1205,7 @@ class MarketUtils:
         """옥션/G마켓 배송프로필 만들기 버튼을 클릭합니다."""
         try:
             selector = self.get_auction_gmarket_shipping_profile_create_button_selector()
-            element = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+            element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
             element.click()
             self.logger.info("옥션/G마켓 배송프로필 만들기 버튼 클릭 완료")
             time.sleep(2)
@@ -1432,4 +1516,247 @@ class MarketUtils:
             
         except Exception as e:
             self.logger.error(f"옥션/G마켓 API 검증 전체 워크플로우 중 오류 발생: {e}")
+            return False
+    
+    def handle_auction_gmarket_api_verification_modal(self):
+        """옥션/G마켓 API 검증 모달창을 처리합니다.
+        
+        처리 항목:
+        1. 택배사를 대한통운에서 롯데택배(5번째)로 변경
+        2. G마켓 사이트할인 동의를 '동의'로 변경
+        3. 옥션 사이트할인 동의를 '동의'로 변경
+        4. 배송프로필 만들기 버튼 클릭
+        
+        Returns:
+            bool: 처리 성공 여부
+        """
+        try:
+            self.logger.info("옥션/G마켓 API 검증 모달창 처리 시작")
+            
+            # 모달창이 열릴 때까지 대기
+            modal_selector = ".ant-drawer-content-wrapper"
+            try:
+                self.wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, modal_selector))
+                )
+                self.logger.info("옥션/G마켓 배송 프로필 모달창 감지됨")
+                time.sleep(2)  # 모달창 완전 로드 대기
+            except TimeoutException:
+                self.logger.error("옥션/G마켓 배송 프로필 모달창을 찾을 수 없습니다")
+                return False
+            
+            # 1. 택배사 변경 (대한통운 -> 롯데택배)
+            if not self._change_auction_gmarket_delivery_company():
+                return False
+            
+            # 2. G마켓 사이트할인 동의 변경
+            if not self._change_gmarket_site_discount_agreement():
+                return False
+            
+            # 3. 옥션 사이트할인 동의 변경
+            if not self._change_auction_site_discount_agreement():
+                return False
+            
+            # 4. 배송프로필 만들기 버튼 클릭
+            if not self._click_auction_gmarket_shipping_profile_create_button():
+                return False
+            
+            # 5. 화면 새로고침
+            self.logger.info("옥션/G마켓 배송 프로필 만들기 완료 후 화면 새로고침 시작")
+            self.driver.refresh()
+            time.sleep(3)  # 새로고침 후 페이지 로드 대기
+            self.logger.info("옥션/G마켓 화면 새로고침 완료")
+            
+            self.logger.info("옥션/G마켓 API 검증 모달창 처리 완료")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"옥션/G마켓 API 검증 모달창 처리 중 오류 발생: {e}")
+            return False
+    
+    def _change_auction_gmarket_delivery_company(self):
+        """옥션/G마켓 택배사를 대한통운에서 롯데택배로 변경합니다."""
+        try:
+            self.logger.info("택배사 변경 시작 (대한통운 -> 롯데택배)")
+            
+            # 택배사 드롭다운 클릭
+            try:
+                # XPath를 사용하여 택배사 드롭다운 찾기
+                delivery_dropdown = self.wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), '택배사')]/following-sibling::div//div[@class='ant-select-selector']"))
+                )
+                delivery_dropdown.click()
+                time.sleep(1)
+                self.logger.info("택배사 드롭다운 클릭 완료")
+            except TimeoutException:
+                # 대체 선택자 시도
+                try:
+                    delivery_dropdown = self.driver.find_element(
+                        By.XPATH, "//div[contains(text(), '택배사')]/..//div[contains(@class, 'ant-select-selector')]"
+                    )
+                    delivery_dropdown.click()
+                    time.sleep(1)
+                    self.logger.info("택배사 드롭다운 클릭 완료 (대체 선택자)")
+                except Exception as e:
+                    self.logger.error(f"택배사 드롭다운 클릭 실패: {e}")
+                    return False
+            
+            # 롯데택배 선택 (5번째 옵션)
+            try:
+                # 드롭다운 옵션들이 나타날 때까지 대기
+                time.sleep(1)
+                
+                # 롯데택배 옵션 클릭 (여러 방법 시도)
+                lotte_options = [
+                    "//div[@class='ant-select-item-option-content'][contains(text(), '롯데')]",
+                    "//div[contains(@class, 'ant-select-item')][contains(text(), '롯데')]",
+                    "//div[contains(@class, 'ant-select-item')][5]",  # 5번째 옵션
+                ]
+                
+                success = False
+                for option_xpath in lotte_options:
+                    try:
+                        lotte_option = self.driver.find_element(By.XPATH, option_xpath)
+                        lotte_option.click()
+                        self.logger.info("롯데택배 선택 완료")
+                        success = True
+                        break
+                    except:
+                        continue
+                
+                if not success:
+                    self.logger.error("롯데택배 옵션을 찾을 수 없습니다")
+                    return False
+                
+                time.sleep(1)
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"롯데택배 선택 중 오류: {e}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"택배사 변경 중 오류 발생: {e}")
+            return False
+    
+    def _change_gmarket_site_discount_agreement(self):
+        """G마켓 사이트할인 동의를 '동의'로 변경합니다."""
+        try:
+            self.logger.info("G마켓 사이트할인 동의 변경 시작")
+            
+            # G마켓 사이트할인 동의의 '동의' 라디오 버튼 클릭
+            gmarket_agree_selectors = [
+                "//div[contains(text(), 'G마켓 사이트할인 동의')]/following-sibling::div//label[contains(., '동의') and not(contains(., '동의하지 않음'))]",
+                "//div[contains(text(), 'G마켓 사이트할인 동의')]/following-sibling::div//span[text()='동의']/parent::label",
+                "//div[contains(text(), 'G마켓 사이트할인 동의')]/following-sibling::div//input[@value='true']/parent::span/parent::label"
+            ]
+            
+            success = False
+            for selector in gmarket_agree_selectors:
+                try:
+                    gmarket_agree_button = self.wait.until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    gmarket_agree_button.click()
+                    self.logger.info("G마켓 사이트할인 '동의' 선택 완료")
+                    success = True
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not success:
+                self.logger.error("G마켓 사이트할인 동의 버튼을 찾을 수 없습니다")
+                return False
+            
+            time.sleep(0.5)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"G마켓 사이트할인 동의 변경 중 오류 발생: {e}")
+            return False
+    
+    def _change_auction_site_discount_agreement(self):
+        """옥션 사이트할인 동의를 '동의'로 변경합니다."""
+        try:
+            self.logger.info("옥션 사이트할인 동의 변경 시작")
+            
+            # 옥션 사이트할인 동의의 '동의' 라디오 버튼 클릭
+            auction_agree_selectors = [
+                "//div[contains(text(), '옥션 사이트할인 동의')]/following-sibling::div//label[contains(., '동의') and not(contains(., '동의하지 않음'))]",
+                "//div[contains(text(), '옥션 사이트할인 동의')]/following-sibling::div//span[text()='동의']/parent::label",
+                "//div[contains(text(), '옥션 사이트할인 동의')]/following-sibling::div//input[@value='true']/parent::span/parent::label"
+            ]
+            
+            success = False
+            for selector in auction_agree_selectors:
+                try:
+                    auction_agree_button = self.wait.until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    auction_agree_button.click()
+                    self.logger.info("옥션 사이트할인 '동의' 선택 완료")
+                    success = True
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not success:
+                self.logger.error("옥션 사이트할인 동의 버튼을 찾을 수 없습니다")
+                return False
+            
+            time.sleep(0.5)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"옥션 사이트할인 동의 변경 중 오류 발생: {e}")
+            return False
+    
+    def _click_auction_gmarket_shipping_profile_create_button(self):
+        """옥션/G마켓 배송프로필 만들기 버튼을 클릭합니다."""
+        try:
+            self.logger.info("옥션/G마켓 배송프로필 만들기 버튼 클릭 시작")
+            
+            # 배송프로필 만들기 버튼 클릭 (11번가와 동일한 선택자 사용)
+            create_button_selectors = [
+                ".ant-drawer-extra button.ant-btn.ant-btn-primary",
+                "//button[contains(., '배송프로필 만들기')]",
+                ".ant-drawer-extra .ant-btn-primary"
+            ]
+            
+            success = False
+            for selector in create_button_selectors:
+                try:
+                    if selector.startswith('//'):
+                        create_button = self.wait.until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                    else:
+                        create_button = self.wait.until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                        )
+                    create_button.click()
+                    self.logger.info("옥션/G마켓 배송프로필 만들기 버튼 클릭 완료")
+                    success = True
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not success:
+                self.logger.error("옥션/G마켓 배송프로필 만들기 버튼을 찾을 수 없습니다")
+                return False
+            
+            # 모달창이 닫힐 때까지 대기
+            try:
+                self.wait.until(
+                    EC.invisibility_of_element_located((By.CSS_SELECTOR, ".ant-drawer-content-wrapper"))
+                )
+                self.logger.info("옥션/G마켓 배송 프로필 모달창 닫힘 확인")
+            except TimeoutException:
+                self.logger.warning("모달창 닫힘 확인 실패, 계속 진행")
+            
+            time.sleep(2)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"옥션/G마켓 배송프로필 만들기 버튼 클릭 중 오류 발생: {e}")
             return False
