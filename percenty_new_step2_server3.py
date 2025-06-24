@@ -24,8 +24,9 @@ from percenty_utils import hide_channel_talk_and_modals, periodic_ui_cleanup, en
 # 새 탭에서의 로그인 모달창 숨기기 필요할 경우에만 사용
 from login_modal_utils import apply_login_modal_hiding_for_new_tab
 
-# 드롭다운 유틸리티 임포트
-from dropdown_utils2 import get_product_search_dropdown_manager
+# 최적화된 드롭다운 유틸리티 임포트
+from dropdown_utils_common import get_common_dropdown_utils
+from dropdown_utils2 import get_product_search_dropdown_manager  # 호환성 유지
 
 # UI 요소 임포트
 from ui_elements import UI_ELEMENTS
@@ -79,6 +80,17 @@ class PercentyNewStep2Server3:
         
         # 2단계 전용 드롭다운 관리자 초기화
         self.dropdown_manager = get_product_search_dropdown_manager(driver)
+        
+        # 최적화된 공통 드롭다운 유틸리티 초기화
+        self.common_dropdown = get_common_dropdown_utils(driver)
+        
+        # 성능 모니터링 초기화
+        self.performance_metrics = {
+            'group_selection_time': [],
+            'items_per_page_time': [],
+            'total_operations': 0,
+            'successful_operations': 0
+        }
 
     def convert_coordinates(self, x, y):
         """
@@ -245,36 +257,51 @@ class PercentyNewStep2Server3:
             logger.info("등록상품관리 화면 로드 대기 - 5초")
             time.sleep(5)
             
-            # 2. 상품검색용 드롭박스에서 '신규수집' 그룹 선택
-            logger.info("2. 상품검색용 드롭박스에서 '신규수집' 그룹 선택")
-            dropdown_manager = get_product_search_dropdown_manager(self.driver)
+            # 2. 상품검색용 드롭박스에서 '신규수집' 그룹 선택 (최적화된 방식)
+            logger.info("2. 상품검색용 드롭박스에서 '신규수집' 그룹 선택 (최적화)")
             
-            # 신규수집 그룹 선택 시도 (최대 3회 재시도)
+            # 성능 추적 시작
+            group_start_time = time.time()
             group_selection_success = False
-            for attempt in range(3):
-                try:
-                    logger.info(f"신규수집 그룹 선택 시도 {attempt + 1}/3")
+            
+            try:
+                # 최적화된 그룹 선택 시도 (5초 타임아웃)
+                group_selection_success = self.common_dropdown.select_group_with_verification(
+                    "신규수집", timeout=5
+                )
+                
+                if group_selection_success:
+                    logger.info("최적화된 신규수집 그룹 선택 성공")
+                else:
+                    logger.warning("최적화된 그룹 선택 실패, 기존 방식으로 재시도")
                     
-                    # 상품검색용 드롭박스에서 신규수집 그룹 선택 (통합 메서드 사용)
-                    if dropdown_manager.select_group_in_search_dropdown("신규수집"):
-                        logger.info("신규수집 그룹 선택 성공")
-                        
-                        # 상품 목록 자동 로딩 대기
-                        if dropdown_manager.verify_page_refresh():
-                            logger.info("상품 목록 자동 로딩 완료")
-                            group_selection_success = True
-                            break
-                        else:
-                            logger.warning("상품 목록 로딩 확인 실패")
-                    else:
-                        logger.warning(f"신규수집 그룹 선택 실패 (시도 {attempt + 1}/3)")
-                    
-                    if attempt < 2:
-                        time.sleep(DELAY_MEDIUM)
-                        
-                except Exception as e:
-                    logger.error(f"신규수집 그룹 선택 중 오류 (시도 {attempt + 1}/3): {e}")
-                    time.sleep(DELAY_MEDIUM)
+                    # 기존 방식으로 폴백
+                    dropdown_manager = get_product_search_dropdown_manager(self.driver)
+                    for attempt in range(3):
+                        try:
+                            logger.info(f"기존 방식 신규수집 그룹 선택 시도 {attempt + 1}/3")
+                            
+                            if dropdown_manager.select_group_in_search_dropdown("신규수집"):
+                                if dropdown_manager.verify_page_refresh():
+                                    logger.info("기존 방식 신규수집 그룹 선택 성공")
+                                    group_selection_success = True
+                                    break
+                            
+                            if attempt < 2:
+                                time.sleep(DELAY_MEDIUM)
+                                
+                        except Exception as e:
+                            logger.error(f"기존 방식 그룹 선택 중 오류 (시도 {attempt + 1}/3): {e}")
+                            time.sleep(DELAY_MEDIUM)
+                            
+            except Exception as e:
+                logger.error(f"그룹 선택 중 오류: {e}")
+            
+            # 성능 추적 종료
+            group_end_time = time.time()
+            group_duration = group_end_time - group_start_time
+            self.performance_metrics['group_selection_time'].append(group_duration)
+            logger.info(f"그룹 선택 소요 시간: {group_duration:.2f}초")
             
             if not group_selection_success:
                 logger.error("신규수집 그룹 선택에 실패했습니다.")
@@ -283,27 +310,50 @@ class PercentyNewStep2Server3:
             # 그룹 선택 후 페이지 로드 대기
             time.sleep(DELAY_MEDIUM)
             
-            # 3. 50개씩 보기 설정
-            logger.info("3. 50개씩 보기 설정")
+            # 3. 50개씩 보기 설정 (최적화된 방식)
+            logger.info("3. 50개씩 보기 설정 (최적화)")
             
-            # 50개씩 보기 설정 시도 (최대 3회 재시도)
+            # 성능 추적 시작
+            items_start_time = time.time()
             items_per_page_success = False
-            for attempt in range(3):
-                try:
-                    logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
+            
+            try:
+                # 최적화된 50개씩 보기 설정 시도 (3초 타임아웃)
+                items_per_page_success = self.common_dropdown.select_items_per_page_with_verification(
+                    "50", timeout=3
+                )
+                
+                if items_per_page_success:
+                    logger.info("최적화된 50개씩 보기 설정 성공")
+                else:
+                    logger.warning("최적화된 50개씩 보기 설정 실패, 기존 방식으로 재시도")
                     
-                    # 50개씩 보기 설정
-                    if dropdown_manager.select_items_per_page("50"):
-                        logger.info("50개씩 보기 설정 성공")
-                        items_per_page_success = True
-                        break
-                    else:
-                        logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
-                        time.sleep(DELAY_MEDIUM)
-                        
-                except Exception as e:
-                    logger.error(f"50개씩 보기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
-                    time.sleep(DELAY_MEDIUM)
+                    # 기존 방식으로 폴백
+                    dropdown_manager = get_product_search_dropdown_manager(self.driver)
+                    for attempt in range(3):
+                        try:
+                            logger.info(f"기존 방식 50개씩 보기 설정 시도 {attempt + 1}/3")
+                            
+                            if dropdown_manager.select_items_per_page("50"):
+                                logger.info("기존 방식 50개씩 보기 설정 성공")
+                                items_per_page_success = True
+                                break
+                            else:
+                                logger.warning(f"기존 방식 50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
+                                time.sleep(DELAY_MEDIUM)
+                                
+                        except Exception as e:
+                            logger.error(f"기존 방식 50개씩 보기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
+                            time.sleep(DELAY_MEDIUM)
+                            
+            except Exception as e:
+                logger.error(f"50개씩 보기 설정 중 오류: {e}")
+            
+            # 성능 추적 종료
+            items_end_time = time.time()
+            items_duration = items_end_time - items_start_time
+            self.performance_metrics['items_per_page_time'].append(items_duration)
+            logger.info(f"50개씩 보기 설정 소요 시간: {items_duration:.2f}초")
             
             if not items_per_page_success:
                 logger.error("50개씩 보기 설정에 실패했습니다.")
@@ -365,16 +415,83 @@ class PercentyNewStep2Server3:
                     time.sleep(DELAY_SHORT)
                 
                 logger.info("등록상품관리 화면이 성공적으로 열렸습니다.")
+                
+                # 성능 요약 로깅
+                self.log_performance_summary()
+                
                 logger.info(f"===== {self.server_name} 전용 2단계 자동화 완료 =====")
                 return True
                 
             except Exception as e:
                 logger.error(f"ProductEditorCore2 작업 처리 중 오류: {e}")
+                # 오류 발생 시에도 성능 요약 로깅
+                self.log_performance_summary()
                 return False
         
         except Exception as e:
             logger.error(f"{self.server_name} 2단계 자동화 중 오류 발생: {e}")
+            # 오류 발생 시에도 성능 요약 로깅
+            self.log_performance_summary()
             return False
+    
+    def _track_performance(self, operation_name, duration, success=True):
+        """
+        성능 추적 헬퍼 메서드
+        
+        Args:
+            operation_name: 작업 이름
+            duration: 소요 시간 (초)
+            success: 성공 여부
+        """
+        self.performance_metrics['total_operations'] += 1
+        if success:
+            self.performance_metrics['successful_operations'] += 1
+        
+        logger.info(f"[성능] {operation_name}: {duration:.2f}초 ({'성공' if success else '실패'})")
+    
+    def get_performance_summary(self):
+        """
+        성능 요약 정보 반환
+        
+        Returns:
+            dict: 성능 요약 정보
+        """
+        metrics = self.performance_metrics
+        
+        summary = {
+            'total_operations': metrics['total_operations'],
+            'successful_operations': metrics['successful_operations'],
+            'success_rate': (metrics['successful_operations'] / max(metrics['total_operations'], 1)) * 100
+        }
+        
+        if metrics['group_selection_time']:
+            summary['avg_group_selection_time'] = sum(metrics['group_selection_time']) / len(metrics['group_selection_time'])
+            summary['total_group_selections'] = len(metrics['group_selection_time'])
+        
+        if metrics['items_per_page_time']:
+            summary['avg_items_per_page_time'] = sum(metrics['items_per_page_time']) / len(metrics['items_per_page_time'])
+            summary['total_items_per_page_operations'] = len(metrics['items_per_page_time'])
+        
+        return summary
+    
+    def log_performance_summary(self):
+        """
+        성능 요약 로깅
+        """
+        summary = self.get_performance_summary()
+        
+        logger.info("===== 성능 요약 =====")
+        logger.info(f"총 작업 수: {summary['total_operations']}")
+        logger.info(f"성공한 작업 수: {summary['successful_operations']}")
+        logger.info(f"성공률: {summary['success_rate']:.1f}%")
+        
+        if 'avg_group_selection_time' in summary:
+            logger.info(f"평균 그룹 선택 시간: {summary['avg_group_selection_time']:.2f}초 ({summary['total_group_selections']}회)")
+        
+        if 'avg_items_per_page_time' in summary:
+            logger.info(f"평균 페이지당 항목 설정 시간: {summary['avg_items_per_page_time']:.2f}초 ({summary['total_items_per_page_operations']}회)")
+        
+        logger.info("===================")
 
     # def run_step3_automation(self):
     #     """
