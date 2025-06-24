@@ -561,8 +561,8 @@ class UploadUtils:
         try:
             logger.info("업로드 완료 대기 시작")
             
-            # 업로드 완료 상태 체크 (최대 5분 대기)
-            max_wait_time = 300  # 5분
+            # 업로드 완료 상태 체크 (최대 1시간 대기)
+            max_wait_time = 3600  # 1시간
             check_interval = 3   # 3초마다 체크
             elapsed_time = 0
             

@@ -98,33 +98,34 @@ class BrowserCore:
             # 알림 권한 요청 비활성화
             chrome_options.add_argument("--disable-notifications")
             
-            # 퍼센티 확장 프로그램 자동 로드 (CRX 파일 우선)
-            try:
-                extension_dir = os.path.join(os.path.dirname(__file__), "percenty_extension")
-                
-                # 방법 1: CRX 파일 사용 (우선) - 정상적인 ID와 출처를 가짐
-                extension_path = os.path.join(extension_dir, "percenty_extension_with_key.crx")
-                if os.path.exists(extension_path):
-                    chrome_options.add_extension(extension_path)
-                    logging.info(f"퍼센티 확장 프로그램 로드 (CRX): {extension_path}")
-                else:
-                    # 방법 2: 대체 CRX 파일 시도
-                    alt_extension_path = os.path.join(extension_dir, "percenty_webstore.crx")
-                    if os.path.exists(alt_extension_path):
-                        chrome_options.add_extension(alt_extension_path)
-                        logging.info(f"퍼센티 확장 프로그램 로드 (대체 CRX): {alt_extension_path}")
-                    else:
-                        # 방법 3: 압축 해제된 확장 프로그램 디렉토리 사용 (최후 수단)
-                        manifest_path = os.path.join(extension_dir, "manifest.json")
-                        if os.path.exists(manifest_path):
-                            chrome_options.add_argument(f"--load-extension={extension_dir}")
-                            logging.info(f"퍼센티 확장 프로그램 로드 (디렉토리): {extension_dir}")
-                            logging.warning("압축 해제된 확장 프로그램을 사용합니다. ID 및 출처 문제가 발생할 수 있습니다.")
-                        else:
-                            logging.warning("퍼센티 확장 프로그램을 찾을 수 없습니다. 확장 프로그램 없이 진행합니다.")
-            except Exception as e:
-                logging.error(f"퍼센티 확장 프로그램 로드 실패: {e}")
-                logging.warning("확장 프로그램 없이 브라우저를 시작합니다.")
+            # 퍼센티 확장 프로그램 자동 로드 (CRX 파일 우선) - 주석처리됨
+            # try:
+            #     extension_dir = os.path.join(os.path.dirname(__file__), "percenty_extension")
+            #     
+            #     # 방법 1: CRX 파일 사용 (우선) - 정상적인 ID와 출처를 가짐
+            #     extension_path = os.path.join(extension_dir, "percenty_extension_with_key.crx")
+            #     if os.path.exists(extension_path):
+            #         chrome_options.add_extension(extension_path)
+            #         logging.info(f"퍼센티 확장 프로그램 로드 (CRX): {extension_path}")
+            #     else:
+            #         # 방법 2: 대체 CRX 파일 시도
+            #         alt_extension_path = os.path.join(extension_dir, "percenty_webstore.crx")
+            #         if os.path.exists(alt_extension_path):
+            #             chrome_options.add_extension(alt_extension_path)
+            #             logging.info(f"퍼센티 확장 프로그램 로드 (대체 CRX): {alt_extension_path}")
+            #         else:
+            #             # 방법 3: 압축 해제된 확장 프로그램 디렉토리 사용 (최후 수단)
+            #             manifest_path = os.path.join(extension_dir, "manifest.json")
+            #             if os.path.exists(manifest_path):
+            #                 chrome_options.add_argument(f"--load-extension={extension_dir}")
+            #                 logging.info(f"퍼센티 확장 프로그램 로드 (디렉토리): {extension_dir}")
+            #                 logging.warning("압축 해제된 확장 프로그램을 사용합니다. ID 및 출처 문제가 발생할 수 있습니다.")
+            #             else:
+            #                 logging.warning("퍼센티 확장 프로그램을 찾을 수 없습니다. 확장 프로그램 없이 진행합니다.")
+            # except Exception as e:
+            #     logging.error(f"퍼센티 확장 프로그램 로드 실패: {e}")
+            #     logging.warning("확장 프로그램 없이 브라우저를 시작합니다.")
+            logging.info("퍼센티 확장 프로그램 자동 로드가 비활성화되었습니다. 수동 설치를 사용합니다.")
             
             # 기본 설정
             chrome_options.add_experimental_option("prefs", {

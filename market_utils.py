@@ -1091,9 +1091,44 @@ class MarketUtils:
         주의: 이 메서드는 이미 11번가-일반 탭이 활성화되고 패널이 로드된 상태에서 호출되어야 합니다.
         """
         try:
-            # 1. API 검증 버튼 클릭
+            # 1. API 검증 버튼 클릭 (안정화된 선택자 적용)
             if not self.click_api_validation_button():
-                return False
+                self.logger.warning("기본 API 검증 버튼 클릭 실패, 대체 선택자 시도")
+                
+                # 다른 마켓에서 검증된 안정화된 선택자들 사용
+                api_validation_selectors = [
+                    # 활성 탭 패널 내 ant-row 컨테이너의 API 검증 버튼 (가장 안정적)
+                    '//div[contains(@class, "ant-tabs-tabpane-active")]//div[contains(@class, "ant-row")]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                    # 11번가 패널 특정 선택자
+                    '//div[@id="rc-tabs-0-panel-11st_general"]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                    # 일반적인 API 검증 버튼 선택자
+                    '//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]'
+                ]
+                
+                api_validation_success = False
+                for i, selector in enumerate(api_validation_selectors, 1):
+                    try:
+                        self.logger.info(f"API 검증 버튼 찾기 시도 {i} - XPath: {selector}")
+                        element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                        
+                        # 포커스 이동 및 스크롤
+                        self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                        time.sleep(0.5)
+                        self.driver.execute_script("arguments[0].focus();", element)
+                        time.sleep(0.5)
+                        
+                        element.click()
+                        self.logger.info(f"API 검증 버튼 클릭 성공 (선택자 {i})")
+                        api_validation_success = True
+                        break
+                        
+                    except Exception as e:
+                        self.logger.warning(f"선택자 {i} 실패: {e}")
+                        continue
+                
+                if not api_validation_success:
+                    self.logger.error("모든 API 검증 버튼 선택자 실패")
+                    return False
             
             # 2. API 검증 모달창 처리
             return self.handle_11st_api_verification_modal()

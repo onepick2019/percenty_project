@@ -18,6 +18,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from dropdown_utils4 import DropdownUtils4
 from upload_utils import UploadUtils
+from market_manager import MarketManager
 from market_utils import MarketUtils
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class ProductEditorCore6_1Dynamic:
         self.dropdown_utils = DropdownUtils4(driver)
         self.upload_utils = UploadUtils(driver)
         self.market_utils = MarketUtils(driver, logger)
+        self.market_manager = MarketManager(driver)
         
         logger.info(f"ProductEditorCore6_1Dynamic 초기화 완료 - 계정: {account_id}")
     
@@ -83,10 +85,11 @@ class ProductEditorCore6_1Dynamic:
                     'talkstore_url': safe_get(row.get('talkstore_url', '')),  # H열
                     'smartstore_api': safe_get(row.get('smartstore_api', '')),  # I열
                     'smartstore_id': safe_get(row.get('smartstore_id', '')),  # J열
-                    'coupang_id': safe_get(row.get('coupang_id', '')),  # K열
-                    'coupang_code': safe_get(row.get('coupang_code', '')),  # L열
-                    'coupang_access': safe_get(row.get('coupang_access', '')),  # M열
-                    'coupang_secret': safe_get(row.get('coupang_secret', '')),  # N열
+                    'smartstore_password': safe_get(row.get('smartstore_password', '')),  # K열                    
+                    'coupang_id': safe_get(row.get('coupang_id', '')),  # L열
+                    'coupang_code': safe_get(row.get('coupang_code', '')),  # M열
+                    'coupang_access': safe_get(row.get('coupang_access', '')),  # N열
+                    'coupang_secret': safe_get(row.get('coupang_secret', '')),  # O열
                     'row_index': idx + 1  # 행 번호 (1부터 시작)
                 }
                 market_configs.append(config)
@@ -108,10 +111,16 @@ class ProductEditorCore6_1Dynamic:
                     api_info.append(f"스마트스토어API={config['smartstore_api']}")
                 if config['smartstore_id']:
                     api_info.append(f"스마트스토어ID={config['smartstore_id']}")
+                if config['smartstore_password']:
+                    api_info.append(f"스마트스토어PW={config['smartstore_password'][:5]}...")
                 if config['coupang_id']:
                     api_info.append(f"쿠팡ID={config['coupang_id']}")
+                if config['coupang_code']:
+                    api_info.append(f"쿠팡CODE={config['coupang_code']}")
                 if config['coupang_access']:
                     api_info.append(f"쿠팡ACCESS={config['coupang_access'][:10]}...")
+                if config['coupang_secret']:
+                    api_info.append(f"쿠팡SECRET={config['coupang_secret'][:10]}...")
                 
                 api_info_str = ", ".join(api_info) if api_info else "API 키 없음"
                 logger.info(f"마켓 설정 {idx+1}: 그룹명={config['groupname']}, {api_info_str}")
@@ -135,10 +144,17 @@ class ProductEditorCore6_1Dynamic:
         try:
             logger.info(f"마켓 설정 화면 정보 처리 시작 - 그룹: {market_config['groupname']}")
             
+            # 현재 마켓 설정 정보 저장 (다른 메서드에서 사용하기 위해)
+            self.current_market_config = market_config
+            
             # 1. 마켓설정 화면 열기
             if not self._open_market_settings():
                 logger.error("마켓설정 화면 열기 실패")
                 return False
+            
+            # 1-1. 퍼센티 확장프로그램 설치
+            if not self._install_percenty_extension():
+                logger.warning("퍼센티 확장프로그램 설치 실패, 계속 진행합니다")
             
             # 2. 모든 마켓 API 연결 끊기
             if not self._disconnect_all_market_apis():
@@ -201,6 +217,20 @@ class ProductEditorCore6_1Dynamic:
             else:
                 logger.info("옥션/G마켓 API 키가 없어서 입력을 건너뜁니다.")
             
+            # 스마트스토어 API 키 입력
+            smartstore_api_key = market_config.get('smartstore_api', '')
+            logger.info(f"스마트스토어 API 키 확인: {smartstore_api_key[:10] if smartstore_api_key else 'N/A'}...")
+            
+            if smartstore_api_key:
+                logger.info("스마트스토어 API 키 입력 시도 시작")
+                if self._input_smartstore_api_key(smartstore_api_key):
+                    logger.info("스마트스토어 API 키 입력 성공")
+                    api_setup_success = True
+                else:
+                    logger.error("스마트스토어 API 키 입력 실패")
+            else:
+                logger.info("스마트스토어 API 키가 없어서 입력을 건너뜁니다.")
+            
             # API 키가 하나도 설정되지 않은 경우
             if not api_setup_success:
                 logger.warning("설정된 API 키가 없습니다.")
@@ -252,6 +282,149 @@ class ProductEditorCore6_1Dynamic:
             
         except Exception as e:
             logger.error(f"마켓설정 화면 열기 중 오류 발생: {e}")
+            return False
+    
+    def _install_percenty_extension(self):
+        """
+        퍼센티 확장프로그램을 설치합니다.
+        새 탭으로 Chrome 웹 스토어를 열고 '크롬에 추가' 버튼을 클릭한 후
+        모달창에서 절대좌표 (1000, 240)를 클릭하여 확장프로그램을 설치합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            import pyautogui
+            import time
+            
+            logger.info("퍼센티 확장프로그램 설치 시작")
+            
+            # 현재 탭 핸들 저장
+            original_window = self.driver.current_window_handle
+            
+            # 새 탭으로 퍼센티 확장프로그램 페이지 열기
+            percenty_extension_url = "https://chromewebstore.google.com/detail/%ED%8D%BC%EC%84%BC%ED%8B%B0/jlcdjppbpplpdgfeknhioedbhfceaben?hl=ko&authuser=0"
+            self.driver.execute_script(f"window.open('{percenty_extension_url}', '_blank');")
+            
+            # 새 탭으로 전환
+            self.driver.switch_to.window(self.driver.window_handles[-1])
+            logger.info("퍼센티 확장프로그램 페이지를 새 탭에서 열었습니다")
+            
+            # 페이지 로드 대기
+            time.sleep(3)
+            
+            # '크롬에 추가' 버튼 클릭
+            try:
+                add_to_chrome_selectors = [
+                    # 실제 Chrome 웹 스토어 DOM 구조 기반 선택자들 (우선순위 높음)
+                    "//button[contains(@class, 'UywwFc-LgbsSe') and contains(.//span[@class='UywwFc-vQzf8d'], 'Chrome에 추가')]",
+                    "//button[contains(@class, 'UywwFc-LgbsSe') and contains(.//span[@class='UywwFc-vQzf8d'], '크롬에 추가')]",
+                    "//button[contains(@class, 'UywwFc-LgbsSe') and contains(.//span[@class='UywwFc-vQzf8d'], 'Add to Chrome')]",
+                    "//span[@class='UywwFc-vQzf8d' and (text()='Chrome에 추가' or text()='크롬에 추가' or text()='Add to Chrome')]/parent::button",
+                    "//button[@jsname='wQO0od']",
+                    "//button[contains(@class, 'UywwFc-LgbsSe')]",
+                    
+                    # 기본 버튼 선택자들
+                    "//button[contains(text(), '크롬에 추가')]",
+                    "//button[contains(text(), 'Chrome에 추가')]",
+                    "//button[contains(text(), 'Add to Chrome')]",
+                    
+                    # 웹스토어 특정 클래스 선택자들
+                    "//div[contains(@class, 'webstore-test-button-label') and contains(text(), '크롬에 추가')]",
+                    "//div[contains(@class, 'webstore-test-button-label') and contains(text(), 'Chrome에 추가')]",
+                    "//div[contains(@class, 'webstore-test-button-label') and contains(text(), 'Add to Chrome')]",
+                    
+                    # 일반적인 div 선택자들
+                    "//div[contains(text(), '크롬에 추가')]",
+                    "//div[contains(text(), 'Chrome에 추가')]",
+                    "//div[contains(text(), 'Add to Chrome')]",
+                    
+                    # 역할 기반 선택자들
+                    "//div[@role='button' and contains(text(), '크롬에 추가')]",
+                    "//div[@role='button' and contains(text(), 'Chrome에 추가')]",
+                    "//div[@role='button' and contains(text(), 'Add to Chrome')]",
+                    
+                    # 클래스 기반 선택자들 (더 포괄적)
+                    "//button[contains(@class, 'webstore') and contains(text(), '추가')]",
+                    "//div[contains(@class, 'webstore') and contains(text(), '추가')]",
+                    "//button[contains(@class, 'install') or contains(@class, 'add')]"
+                ]
+                
+                button_clicked = False
+                
+                # 먼저 XPath 선택자들 시도
+                xpath_selectors = [sel for sel in add_to_chrome_selectors if sel.startswith('//')]
+                for selector in xpath_selectors:
+                    try:
+                        button = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                        button.click()
+                        logger.info(f"'크롬에 추가' 버튼 클릭 완료 (선택자: {selector})")
+                        button_clicked = True
+                        break
+                    except TimeoutException:
+                        continue
+                
+                # XPath로 찾지 못한 경우 JavaScript로 직접 검색 및 클릭 시도
+                if not button_clicked:
+                    try:
+                        js_script = """
+                        var buttons = document.querySelectorAll('button, div[role="button"], div');
+                        for (var i = 0; i < buttons.length; i++) {
+                            var text = buttons[i].textContent || buttons[i].innerText;
+                            if (text && (text.includes('크롬에 추가') || text.includes('Chrome에 추가') || text.includes('Add to Chrome'))) {
+                                buttons[i].click();
+                                return true;
+                            }
+                        }
+                        return false;
+                        """
+                        result = self.driver.execute_script(js_script)
+                        if result:
+                            logger.info("'크롬에 추가' 버튼 클릭 완료 (JavaScript 방식)")
+                            button_clicked = True
+                    except Exception as e:
+                        logger.warning(f"JavaScript 방식 클릭 실패: {e}")
+                
+                if not button_clicked:
+                    logger.error("'크롬에 추가' 버튼을 찾을 수 없습니다")
+                    self.driver.close()
+                    self.driver.switch_to.window(original_window)
+                    return False
+                
+                # 모달창이 나타날 때까지 잠시 대기
+                time.sleep(2)
+                
+                # PyAutoGUI를 사용하여 절대좌표 (1000, 240) 클릭
+                logger.info("PyAutoGUI로 좌표 (1000, 240) 클릭 시도...")
+                pyautogui.click(1000, 240)
+                logger.info("PyAutoGUI 클릭 완료: (1000, 240)")
+                
+                # 확장프로그램 설치 완료 대기
+                time.sleep(3)
+                
+                logger.info("퍼센티 확장프로그램 설치 완료")
+                
+            except Exception as e:
+                logger.error(f"확장프로그램 설치 중 오류: {e}")
+            
+            # 새 탭 닫기
+            self.driver.close()
+            
+            # 원래 탭으로 돌아가기
+            self.driver.switch_to.window(original_window)
+            logger.info("원래 탭으로 돌아갔습니다")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"퍼센티 확장프로그램 설치 중 오류 발생: {e}")
+            # 오류 발생 시에도 원래 탭으로 돌아가기 시도
+            try:
+                if len(self.driver.window_handles) > 1:
+                    self.driver.close()
+                    self.driver.switch_to.window(original_window)
+            except:
+                pass
             return False
     
     def _disconnect_all_market_apis(self):
@@ -409,13 +582,54 @@ class ProductEditorCore6_1Dynamic:
                 logger.error(f"톡스토어 주소 입력 실패: {e}")
                 return False
             
-            # 5. API 검증 버튼 클릭
-            if self.market_utils.click_api_validation_button():
+            # 5. API 검증 버튼 클릭 (안정화된 선택자 사용)
+            try:
+                if not self.market_utils.click_api_validation_button():
+                    logger.warning("기본 API 검증 버튼 클릭 실패, 대체 선택자 시도")
+                    
+                    # 11번가, 스마트스토어, 옥션 등에서 검증된 안정화된 선택자들 사용
+                    api_validation_selectors = [
+                        # 활성 탭 패널 내 ant-row 컨테이너의 API 검증 버튼 (가장 안정적)
+                        '//div[contains(@class, "ant-tabs-tabpane-active")]//div[contains(@class, "ant-row")]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                        # 톡스토어 패널 특정 선택자
+                        '//div[@id="rc-tabs-0-panel-kakao"]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                        # 일반적인 API 검증 버튼 선택자
+                        '//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]'
+                    ]
+                    
+                    api_validation_success = False
+                    for i, selector in enumerate(api_validation_selectors, 1):
+                        try:
+                            logger.info(f"API 검증 버튼 찾기 시도 {i} - XPath: {selector}")
+                            element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                            
+                            # 포커스 이동 및 스크롤
+                            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                            time.sleep(0.5)
+                            self.driver.execute_script("arguments[0].focus();", element)
+                            time.sleep(0.5)
+                            
+                            element.click()
+                            logger.info(f"API 검증 버튼 클릭 성공 (선택자 {i})")
+                            api_validation_success = True
+                            break
+                            
+                        except Exception as e:
+                            logger.warning(f"선택자 {i} 실패: {e}")
+                            continue
+                    
+                    if not api_validation_success:
+                        logger.error("모든 API 검증 버튼 선택자 실패")
+                        return False
+                else:
+                    logger.info("기본 API 검증 버튼 클릭 성공")
+                
                 logger.info("톡스토어 API 검증 성공")
-                time.sleep(2)  # 검증 완료 대기
+                time.sleep(3)  # 검증 완료 대기 시간 증가
                 return True
-            else:
-                logger.error("톡스토어 API 검증 실패")
+                
+            except Exception as e:
+                logger.error(f"톡스토어 API 검증 중 오류: {e}")
                 return False
                 
         except Exception as e:
@@ -484,8 +698,49 @@ class ProductEditorCore6_1Dynamic:
                 logger.info("옥션/G마켓 API KEY 입력 성공")
                 
                 # 4. API 검증 진행 (옥션/G마켓은 하나의 검증 프로세스로 처리)
-                if self.market_utils.click_api_validation_button():
+                try:
+                    if not self.market_utils.click_api_validation_button():
+                        logger.warning("기본 API 검증 버튼 클릭 실패, 대체 선택자 시도")
+                        
+                        # 11번가, 스마트스토어, 톡스토어 등에서 검증된 안정화된 선택자들 사용
+                        api_validation_selectors = [
+                            # 활성 탭 패널 내 ant-row 컨테이너의 API 검증 버튼 (가장 안정적)
+                            '//div[contains(@class, "ant-tabs-tabpane-active")]//div[contains(@class, "ant-row")]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                            # 옥션/G마켓 패널 특정 선택자
+                            '//div[@id="rc-tabs-0-panel-esm"]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                            # 일반적인 API 검증 버튼 선택자
+                            '//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]'
+                        ]
+                        
+                        api_validation_success = False
+                        for i, selector in enumerate(api_validation_selectors, 1):
+                            try:
+                                logger.info(f"API 검증 버튼 찾기 시도 {i} - XPath: {selector}")
+                                element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                                
+                                # 포커스 이동 및 스크롤
+                                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                                time.sleep(0.5)
+                                self.driver.execute_script("arguments[0].focus();", element)
+                                time.sleep(0.5)
+                                
+                                element.click()
+                                logger.info(f"API 검증 버튼 클릭 성공 (선택자 {i})")
+                                api_validation_success = True
+                                break
+                                
+                            except Exception as e:
+                                logger.warning(f"선택자 {i} 실패: {e}")
+                                continue
+                        
+                        if not api_validation_success:
+                            logger.error("모든 API 검증 버튼 선택자 실패")
+                            return False
+                    else:
+                        logger.info("기본 API 검증 버튼 클릭 성공")
+                    
                     logger.info("옥션/G마켓 API 검증 버튼 클릭 성공")
+                    time.sleep(1)  # 잠시 대기
                     
                     # 5. API 검증 모달창 처리
                     if self.market_utils.handle_auction_gmarket_api_verification_modal():
@@ -494,8 +749,9 @@ class ProductEditorCore6_1Dynamic:
                     else:
                         logger.error("옥션/G마켓 API 검증 모달창 처리 실패")
                         return False
-                else:
-                    logger.error("옥션/G마켓 API 검증 버튼 클릭 실패")
+                        
+                except Exception as e:
+                    logger.error(f"옥션/G마켓 API 검증 중 오류: {e}")
                     return False
             else:
                 logger.error("옥션/G마켓 API KEY 입력 실패")
@@ -503,6 +759,376 @@ class ProductEditorCore6_1Dynamic:
                 
         except Exception as e:
             logger.error(f"옥션/G마켓 API KEY 입력 중 오류 발생: {e}")
+            return False
+    
+    def _input_smartstore_api_key(self, api_key):
+        """
+        스마트스토어 API KEY를 입력합니다.
+        
+        Args:
+            api_key (str): 스마트스토어 API 키
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("스마트스토어 API KEY 입력 시작")
+            
+            # 1. 스마트스토어 탭 선택
+            if not self.market_utils.switch_to_market('smartstore'):
+                logger.error("스마트스토어 탭 전환 실패")
+                return False
+            
+            # 2. 스마트스토어 패널 로드 대기
+            if not self.market_utils.wait_for_market_panel_load('smartstore'):
+                logger.error("스마트스토어 패널 로드 실패")
+                return False
+            
+            # 3. API 키 입력
+            try:
+                # 스마트스토어 API 키 입력창 선택자들 (두 번째 입력창 - API 연동용 판매자 ID)
+                # 성공률이 높은 선택자를 우선순위로 배치
+                api_key_selectors = [
+                    # 가장 성공률이 높은 선택자 (활성 탭의 비활성화되지 않은 입력창)
+                    '.ant-tabs-tabpane-active input[placeholder="미설정"]:not([disabled])',
+                    # 스마트스토어 패널의 특정 입력창
+                    'div[id="rc-tabs-0-panel-smartstore"] input[placeholder="미설정"]:not([disabled])',
+                    # 활성 탭의 두 번째 입력창
+                    '.ant-tabs-tabpane-active div:nth-child(2) input[placeholder="미설정"]',
+                    # 스마트스토어 패널의 두 번째 입력창
+                    'div[id="rc-tabs-0-panel-smartstore"] div:nth-child(2) input[placeholder="미설정"]',
+                    # 일반적인 텍스트 입력창
+                    'div[id="rc-tabs-0-panel-smartstore"] input[type="text"]:not([disabled])'
+                ]
+                
+                api_key_element = None
+                for i, selector in enumerate(api_key_selectors):
+                    try:
+                        logger.info(f"스마트스토어 API 키 입력창 찾기 시도 {i+1}/{len(api_key_selectors)}")
+                        api_key_element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                        
+                        # 요소가 보이고 활성화되어 있는지 확인
+                        if api_key_element.is_displayed() and api_key_element.is_enabled():
+                            logger.info(f"스마트스토어 API 키 입력창 발견 (선택자 {i+1})")
+                            break
+                        else:
+                            logger.warning(f"선택자 {i+1}: 요소가 비활성화되어 있음")
+                            api_key_element = None
+                            continue
+                            
+                    except Exception as e:
+                        logger.warning(f"선택자 {i+1} 실패: {e}")
+                        continue
+                
+                if not api_key_element:
+                    logger.error("스마트스토어 API 키 입력창을 찾을 수 없음")
+                    return False
+                
+                # 입력창에 포커스 설정
+                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", api_key_element)
+                time.sleep(0.5)
+                self.driver.execute_script("arguments[0].focus();", api_key_element)
+                time.sleep(0.5)
+                
+                # 기존 값 삭제 후 새 값 입력
+                api_key_element.clear()
+                time.sleep(0.3)
+                api_key_element.send_keys(api_key)
+                logger.info(f"스마트스토어 API 키 입력 완료: {api_key[:10]}...")
+                
+            except Exception as e:
+                logger.error(f"스마트스토어 API 키 입력 실패: {e}")
+                return False
+            
+            # 4. API 검증 버튼 클릭 (안정화된 선택자 사용)
+            try:
+                if not self.market_utils.click_api_validation_button():
+                    logger.warning("기본 API 검증 버튼 클릭 실패, 대체 선택자 시도")
+                    
+                    # 11번가, 톡스토어, 옥션 등에서 검증된 안정화된 선택자들 사용
+                    api_validation_selectors = [
+                        # 활성 탭 패널 내 ant-row 컨테이너의 API 검증 버튼 (가장 안정적)
+                        '//div[contains(@class, "ant-tabs-tabpane-active")]//div[contains(@class, "ant-row")]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                        # 스마트스토어 패널 특정 선택자
+                        '//div[@id="rc-tabs-0-panel-smartstore"]//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]',
+                        # 일반적인 API 검증 버튼 선택자
+                        '//button[contains(@class, "ant-btn-primary") and .//span[text()="API 검증"]]'
+                    ]
+                    
+                    api_validation_success = False
+                    for i, selector in enumerate(api_validation_selectors, 1):
+                        try:
+                            logger.info(f"API 검증 버튼 찾기 시도 {i} - XPath: {selector}")
+                            element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                            
+                            # 포커스 이동 및 스크롤
+                            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                            time.sleep(0.5)
+                            self.driver.execute_script("arguments[0].focus();", element)
+                            time.sleep(0.5)
+                            
+                            element.click()
+                            logger.info(f"API 검증 버튼 클릭 성공 (선택자 {i})")
+                            api_validation_success = True
+                            break
+                            
+                        except Exception as e:
+                            logger.warning(f"선택자 {i} 실패: {e}")
+                            continue
+                    
+                    if not api_validation_success:
+                        logger.error("모든 API 검증 버튼 선택자 실패")
+                        return False
+                else:
+                    logger.info("기본 API 검증 버튼 클릭 성공")
+                
+                time.sleep(3)  # 검증 완료 대기 시간 증가
+                
+            except Exception as e:
+                logger.error(f"API 검증 버튼 클릭 중 오류: {e}")
+                return False
+            
+            # 5. 배송프로필 추가 클릭해서 배송프로필 만들기 모달창 열기
+            if not self._add_smartstore_delivery_profile():
+                logger.error("스마트스토어 배송프로필 추가 실패")
+                return False
+            
+            # 6. 스마트스토어 로그인 실행
+            if not self._login_smartstore():
+                logger.error("스마트스토어 로그인 실패")
+                return False
+            
+            logger.info("스마트스토어 API 키 입력, 배송프로필 설정 및 로그인 완료")
+            return True
+                
+        except Exception as e:
+            logger.error(f"스마트스토어 API KEY 입력 중 오류 발생: {e}")
+            return False
+    
+    def _add_smartstore_delivery_profile(self):
+        """
+        스마트스토어 배송프로필을 추가합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("스마트스토어 배송프로필 추가 시작")
+            
+            # 1. 배송프로필 추가 버튼 클릭
+            try:
+                add_profile_selector = 'button[class*="ant-btn"][class*="ant-btn-primary"][class*="ant-btn-background-ghost"] span:contains("배송 프로필 추가")'
+                # CSS 선택자로 다시 시도
+                add_profile_selector = 'button.ant-btn.ant-btn-primary.ant-btn-background-ghost'
+                add_profile_elements = self.driver.find_elements(By.CSS_SELECTOR, add_profile_selector)
+                
+                # 텍스트로 필터링
+                add_profile_button = None
+                for element in add_profile_elements:
+                    if "배송 프로필 추가" in element.text:
+                        add_profile_button = element
+                        break
+                
+                if not add_profile_button:
+                    logger.error("배송프로필 추가 버튼을 찾을 수 없음")
+                    return False
+                
+                add_profile_button.click()
+                logger.info("배송프로필 추가 버튼 클릭 완료")
+                time.sleep(2)  # 모달창 로드 대기
+                
+            except Exception as e:
+                logger.error(f"배송프로필 추가 버튼 클릭 실패: {e}")
+                return False
+            
+            # 2. 택배사 드롭박스에서 롯데택배 선택
+            try:
+                # 드롭다운 클릭
+                dropdown_selector = '.ant-select-selector'
+                dropdown_element = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, dropdown_selector)))
+                dropdown_element.click()
+                logger.info("택배사 드롭다운 클릭 완료")
+                time.sleep(1)
+                
+                # 롯데택배 옵션 선택
+                lotte_option_selector = '.ant-select-item-option[title="롯데택배"]'
+                lotte_option = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, lotte_option_selector)))
+                lotte_option.click()
+                logger.info("롯데택배 선택 완료")
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"롯데택배 선택 실패: {e}")
+                return False
+            
+            # 3. 배송프로필 만들기 버튼 클릭해서 모달창 닫기
+            try:
+                create_profile_selector = 'button.ant-btn.ant-btn-primary'
+                create_profile_elements = self.driver.find_elements(By.CSS_SELECTOR, create_profile_selector)
+                
+                # 텍스트로 필터링
+                create_profile_button = None
+                for element in create_profile_elements:
+                    if "배송프로필 만들기" in element.text:
+                        create_profile_button = element
+                        break
+                
+                if not create_profile_button:
+                    logger.error("배송프로필 만들기 버튼을 찾을 수 없음")
+                    return False
+                
+                create_profile_button.click()
+                logger.info("배송프로필 만들기 버튼 클릭 완료")
+                time.sleep(2)  # 모달창 닫기 대기
+                
+            except Exception as e:
+                logger.error(f"배송프로필 만들기 버튼 클릭 실패: {e}")
+                return False
+            
+            logger.info("스마트스토어 배송프로필 추가 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"스마트스토어 배송프로필 추가 중 오류 발생: {e}")
+            return False
+    
+    def _login_smartstore(self):
+        """
+        스마트스토어 로그인을 수행합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("스마트스토어 로그인 시작")
+            
+            # 현재 설정된 마켓 설정에서 스마트스토어 로그인 정보 가져오기
+            if not hasattr(self, 'current_market_config') or not self.current_market_config:
+                logger.error("마켓 설정 정보가 없습니다")
+                return False
+            
+            smartstore_id = self.current_market_config.get('smartstore_id', '')
+            smartstore_password = self.current_market_config.get('smartstore_password', '')
+            
+            if not smartstore_id or not smartstore_password:
+                logger.error("스마트스토어 로그인 정보가 없습니다")
+                return False
+            
+            logger.info(f"스마트스토어 로그인 정보 확인 - ID: {smartstore_id}")
+            
+            # 1. 새탭에서 스마트스토어 열기
+            original_window = self.driver.current_window_handle
+            self.driver.execute_script("window.open('https://sell.smartstore.naver.com/', '_blank');")
+            
+            # 새 탭으로 전환
+            all_windows = self.driver.window_handles
+            new_window = [window for window in all_windows if window != original_window][0]
+            self.driver.switch_to.window(new_window)
+            logger.info("스마트스토어 새탭 열기 완료")
+            
+            time.sleep(3)  # 페이지 로드 대기
+            
+            # 2. 로그인하기 버튼 클릭
+            try:
+                login_button_selector = 'button.btn.btn-login[data-nclicks-code="main.sellerlogin"]'
+                login_button = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, login_button_selector)))
+                login_button.click()
+                logger.info("로그인하기 버튼 클릭 완료")
+                time.sleep(3)  # 로그인 화면 로드 대기
+                
+            except Exception as e:
+                logger.error(f"로그인하기 버튼 클릭 실패: {e}")
+                self.driver.close()
+                self.driver.switch_to.window(original_window)
+                return False
+            
+            # 3. 아이디와 비밀번호 입력
+            try:
+                # 아이디 입력
+                id_input_selector = 'input.Login_ipt__6a-x7[type="text"][placeholder="아이디 또는 이메일 주소"]'
+                id_input = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, id_input_selector)))
+                id_input.clear()
+                id_input.send_keys(smartstore_id)
+                logger.info("아이디 입력 완료")
+                
+                # 비밀번호 입력
+                password_input_selector = 'input.Login_ipt__6a-x7[type="password"][placeholder="비밀번호"]'
+                password_input = self.driver.find_element(By.CSS_SELECTOR, password_input_selector)
+                password_input.clear()
+                password_input.send_keys(smartstore_password)
+                logger.info("비밀번호 입력 완료")
+                
+                time.sleep(1)  # 입력 완료 대기
+                
+            except Exception as e:
+                logger.error(f"아이디/비밀번호 입력 실패: {e}")
+                self.driver.close()
+                self.driver.switch_to.window(original_window)
+                return False
+            
+            # 4. 로그인 버튼 클릭
+            try:
+                login_submit_selector = 'button.Button_btn__wNWXt.Button_btn_plain__vwFfm'
+                login_submit_button = self.driver.find_element(By.CSS_SELECTOR, login_submit_selector)
+                
+                # 버튼 텍스트 확인
+                if "로그인" in login_submit_button.text:
+                    login_submit_button.click()
+                    logger.info("로그인 버튼 클릭 완료")
+                    time.sleep(5)  # 로그인 처리 대기
+                else:
+                    logger.error("로그인 버튼을 찾을 수 없음")
+                    self.driver.close()
+                    self.driver.switch_to.window(original_window)
+                    return False
+                
+            except Exception as e:
+                logger.error(f"로그인 버튼 클릭 실패: {e}")
+                self.driver.close()
+                self.driver.switch_to.window(original_window)
+                return False
+            
+            # 5. 로그인 성공 확인 (간단한 URL 체크)
+            try:
+                # 로그인 후 URL 변화 확인
+                current_url = self.driver.current_url
+                if "sell.smartstore.naver.com" in current_url and "login" not in current_url:
+                    logger.info("스마트스토어 로그인 성공 확인")
+                else:
+                    logger.warning(f"로그인 상태 불확실 - 현재 URL: {current_url}")
+                
+            except Exception as e:
+                logger.warning(f"로그인 상태 확인 중 오류: {e}")
+            
+            # 6. 새탭 닫기
+            try:
+                self.driver.close()
+                self.driver.switch_to.window(original_window)
+                logger.info("스마트스토어 로그인 탭 닫기 완료")
+                
+            except Exception as e:
+                logger.error(f"탭 닫기 실패: {e}")
+                # 원래 탭으로 돌아가기 시도
+                try:
+                    self.driver.switch_to.window(original_window)
+                except:
+                    pass
+            
+            logger.info("스마트스토어 로그인 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"스마트스토어 로그인 중 오류 발생: {e}")
+            # 오류 발생 시 원래 탭으로 돌아가기 시도
+            try:
+                if hasattr(self, 'driver') and self.driver:
+                    current_handles = self.driver.window_handles
+                    if len(current_handles) > 1:
+                        self.driver.close()
+                    if original_window in current_handles:
+                        self.driver.switch_to.window(original_window)
+            except:
+                pass
             return False
     
     def _navigate_to_product_registration(self):
@@ -611,29 +1237,60 @@ class ProductEditorCore6_1Dynamic:
         try:
             logger.info(f"상품 업로드 워크플로우 시작: {group_name}")
             
-            # 1. 상품 수 확인 (0개인 경우 스킵)
-            product_count = self._check_product_count()
-            if product_count == 0:
-                logger.info(f"그룹 '{group_name}'에 상품이 0개이므로 워크플로우를 스킵합니다")
-                return True
-            elif product_count == -1:
-                logger.warning("상품 수 확인 실패, 계속 진행합니다")
-            else:
-                logger.info(f"확인된 상품 수: {product_count}개")
+            # 1-4단계를 2회 반복
+            for round_num in range(1, 3):  # 1회차, 2회차
+                logger.info(f"업로드 {round_num}회차 시작")
+                
+                # 1. 상품 수 확인 (0개인 경우 스킵)
+                product_count = self._check_product_count()
+                if product_count == 0:
+                    logger.info(f"그룹 '{group_name}'에 상품이 0개이므로 워크플로우를 스킵합니다")
+                    return True
+                elif product_count == -1:
+                    logger.warning(f"{round_num}회차 상품 수 확인 실패, 계속 진행합니다")
+                else:
+                    logger.info(f"{round_num}회차 확인된 상품 수: {product_count}개")
+                
+                # 2. 50개씩 보기 설정 
+                # if not self._set_items_per_page_50(): 
+                #    logger.error("50개씩 보기 설정 실패") 
+                #    return False
+                
+                # 3. 전체선택
+                if not self._select_all_products():
+                    logger.error(f"{round_num}회차 전체선택 실패")
+                    return False
+                
+                # 4. 업로드 버튼 클릭해서 업로드 모달창 열고 선택 상품 일괄 업로드 클릭
+                if not self._handle_bulk_upload():
+                    logger.error(f"{round_num}회차 일괄 업로드 처리 실패")
+                    return False
+                
+                # 5. 업로드 완료 대기 및 모달창 닫기
+                if not self._wait_for_upload_completion():
+                    logger.warning(f"{round_num}회차 업로드 완료 대기 또는 모달창 닫기에 실패했지만 계속 진행합니다")
+                
+                # 모달창 닫기 후 안정성을 위한 대기
+                time.sleep(5)
+                
+                # 2회차가 아닌 경우에만 새로고침 버튼 클릭
+                if round_num < 2:
+                    logger.info(f"{round_num}회차 완료, 새로고침 버튼 클릭 후 다음 회차 진행")
+                    try:
+                        # 새로고침 버튼 클릭
+                        refresh_button = WebDriverWait(self.driver, 10).until(
+                            EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'ant-btn-primary') and contains(@class, 'ant-btn-background-ghost')]//span[text()='새로고침']/parent::button"))
+                        )
+                        refresh_button.click()
+                        logger.info("새로고침 버튼 클릭 완료")
+                        time.sleep(3)  # 새로고침 후 대기
+                    except Exception as e:
+                        logger.error(f"새로고침 버튼 클릭 실패: {e}")
+                        # 화면 새로고침은 선택된 그룹이 유지되지 않으므로 사용하지 않음
             
-            # 2. 전체선택
-            if not self._select_all_products():
-                logger.error("전체선택 실패")
-                return False
-            
-            # 3. 업로드 버튼 클릭해서 업로드 모달창 열고 선택 상품 일괄 업로드 클릭
-            if not self._handle_bulk_upload():
-                logger.error("일괄 업로드 처리 실패")
-                return False
-            
-            # 4. 업로드 완료 대기 및 모달창 닫기
-            if not self._wait_for_upload_completion():
-                logger.warning("업로드 완료 대기 또는 모달창 닫기에 실패했지만 계속 진행합니다")
+            # 6. 스마트스토어 배송정보 변경 (2회 업로드 완료 후)
+            if not self._update_smartstore_delivery_info():
+                logger.warning("스마트스토어 배송정보 변경에 실패했지만 계속 진행합니다")
             
             logger.info(f"상품 업로드 워크플로우 완료: {group_name}")
             return True
@@ -800,6 +1457,30 @@ class ProductEditorCore6_1Dynamic:
             
         except Exception as e:
             logger.error(f"동적 업로드 워크플로우 중 오류 발생: {e}")
+            return False
+    
+    def _update_smartstore_delivery_info(self):
+        """
+        스마트스토어 배송정보 변경을 수행합니다.
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        try:
+            logger.info("스마트스토어 배송정보 변경을 시작합니다")
+            
+            # MarketManager를 통해 스마트스토어 배송정보 변경 실행
+            result = self.market_manager.update_smartstore_delivery_info()
+            
+            if result:
+                logger.info("스마트스토어 배송정보 변경이 완료되었습니다")
+            else:
+                logger.warning("스마트스토어 배송정보 변경에 실패했습니다")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"스마트스토어 배송정보 변경 중 오류 발생: {e}")
             return False
 
 # 사용 예시
