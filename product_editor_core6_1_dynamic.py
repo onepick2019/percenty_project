@@ -38,6 +38,9 @@ class ProductEditorCore6_1Dynamic:
         self.market_utils = MarketUtils(driver, logger)
         self.market_manager = MarketManager(driver)
         
+        # 스마트스토어 API 키 설정 상태 추적
+        self.smartstore_api_configured = False
+        
         logger.info(f"ProductEditorCore6_1Dynamic 초기화 완료 - 계정: {account_id}")
     
     def load_market_config_from_excel(self):
@@ -150,12 +153,10 @@ class ProductEditorCore6_1Dynamic:
             # 1. 마켓설정 화면 열기
             if not self._open_market_settings():
                 logger.error("마켓설정 화면 열기 실패")
+                self._ensure_main_tab_focus()
                 return False
             
-            # 1-1. 퍼센티 확장프로그램 설치
-            if not self._install_percenty_extension():
-                logger.warning("퍼센티 확장프로그램 설치 실패, 계속 진행합니다")
-            
+
             # 2. 모든 마켓 API 연결 끊기
             if not self._disconnect_all_market_apis():
                 logger.error("마켓 API 연결 끊기 실패")
@@ -226,10 +227,12 @@ class ProductEditorCore6_1Dynamic:
                 if self._input_smartstore_api_key(smartstore_api_key):
                     logger.info("스마트스토어 API 키 입력 성공")
                     api_setup_success = True
+                    self.smartstore_api_configured = True  # 스마트스토어 API 키 설정 완료 표시
                 else:
                     logger.error("스마트스토어 API 키 입력 실패")
             else:
                 logger.info("스마트스토어 API 키가 없어서 입력을 건너뜁니다.")
+                self.smartstore_api_configured = False  # 스마트스토어 API 키 미설정 표시
             
             # API 키가 하나도 설정되지 않은 경우
             if not api_setup_success:
@@ -278,10 +281,12 @@ class ProductEditorCore6_1Dynamic:
                     continue
             
             logger.error("마켓설정 화면 열기 실패 - 요소를 찾을 수 없음")
+            self._ensure_main_tab_focus()
             return False
             
         except Exception as e:
             logger.error(f"마켓설정 화면 열기 중 오류 발생: {e}")
+            self._ensure_main_tab_focus()
             return False
     
     def _install_percenty_extension(self):
@@ -1421,6 +1426,9 @@ class ProductEditorCore6_1Dynamic:
                 logger.info(f"=== 마켓 설정 {idx}/{len(market_configs)} 처리 시작 ===")
                 logger.info(f"그룹명: {market_config['groupname']}, API키: {market_config['11store_api'][:10]}...")
                 
+                # 각 마켓 설정 처리 시작 시 스마트스토어 API 설정 상태 초기화
+                self.smartstore_api_configured = False
+                
                 # 두 번째 마켓부터 DOM 간섭 방지를 위한 페이지 새로고침
                 if idx > 1:
                     logger.info("이전 마켓 설정 DOM 간섭 방지를 위해 페이지 새로고침")
@@ -1430,11 +1438,13 @@ class ProductEditorCore6_1Dynamic:
                 # 2-1. 마켓 설정 화면 정보 처리
                 if not self.setup_market_configuration(market_config):
                     logger.error(f"마켓 설정 {idx} 처리 실패")
+                    self._ensure_main_tab_focus()
                     continue
                 
                 # 2-2. 신규상품등록 화면으로 전환
                 if not self._navigate_to_product_registration():
                     logger.error(f"신규상품등록 화면 전환 실패")
+                    self._ensure_main_tab_focus()
                     continue
                 
                 # 2-3. 상품검색 드롭박스를 열고 동적 그룹 선택
@@ -1462,11 +1472,17 @@ class ProductEditorCore6_1Dynamic:
     def _update_smartstore_delivery_info(self):
         """
         스마트스토어 배송정보 변경을 수행합니다.
+        스마트스토어 API 키가 설정되지 않은 경우 건너뜁니다.
         
         Returns:
             bool: 성공 시 True, 실패 시 False
         """
         try:
+            # 스마트스토어 API 키 설정 여부 확인
+            if not self.smartstore_api_configured:
+                logger.info("스마트스토어 API 키가 설정되지 않아 배송정보 변경을 건너뜁니다")
+                return True  # 건너뛰는 것은 성공으로 처리
+            
             logger.info("스마트스토어 배송정보 변경을 시작합니다")
             
             # MarketManager를 통해 스마트스토어 배송정보 변경 실행
@@ -1481,6 +1497,74 @@ class ProductEditorCore6_1Dynamic:
             
         except Exception as e:
             logger.error(f"스마트스토어 배송정보 변경 중 오류 발생: {e}")
+            return False
+    
+    def _ensure_main_tab_focus(self):
+        """
+        메인 퍼센티 탭으로 확실히 복귀하고 불필요한 탭들을 정리합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # 현재 열린 모든 탭 확인
+            all_windows = self.driver.window_handles
+            logger.info(f"현재 열린 탭 수: {len(all_windows)}")
+            
+            main_window = None
+            
+            # 퍼센티 메인 탭 찾기 (URL 기준)
+            for window in all_windows:
+                try:
+                    self.driver.switch_to.window(window)
+                    current_url = self.driver.current_url
+                    logger.info(f"탭 URL 확인: {current_url}")
+                    
+                    if "percenty.com" in current_url:
+                        main_window = window
+                        logger.info(f"퍼센티 메인 탭 발견: {window}")
+                        break
+                except Exception as e:
+                    logger.warning(f"탭 확인 중 오류: {e}")
+                    continue
+            
+            # 메인 탭을 찾지 못한 경우 첫 번째 탭을 메인으로 간주
+            if main_window is None:
+                main_window = all_windows[0]
+                logger.warning("퍼센티 메인 탭을 찾지 못해 첫 번째 탭을 메인으로 설정")
+            
+            # 다른 탭들 모두 닫기
+            for window in all_windows:
+                if window != main_window:
+                    try:
+                        self.driver.switch_to.window(window)
+                        self.driver.close()
+                        logger.info(f"불필요한 탭 닫기 완료: {window}")
+                    except Exception as e:
+                        logger.warning(f"탭 닫기 실패: {e}")
+                        continue
+            
+            # 메인 탭으로 최종 복귀
+            self.driver.switch_to.window(main_window)
+            final_url = self.driver.current_url
+            logger.info(f"메인 탭 복귀 완료 - 현재 URL: {final_url}")
+            
+            # 최종 탭 수 확인
+            final_tab_count = len(self.driver.window_handles)
+            logger.info(f"탭 정리 완료 - 최종 탭 수: {final_tab_count}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"메인 탭 복귀 실패: {e}")
+            # 최소한 첫 번째 탭으로라도 복귀 시도
+            try:
+                all_windows = self.driver.window_handles
+                if all_windows:
+                    self.driver.switch_to.window(all_windows[0])
+                    logger.info("첫 번째 탭으로 복귀 완료")
+            except:
+                logger.error("첫 번째 탭으로 복귀도 실패")
             return False
 
 # 사용 예시

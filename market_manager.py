@@ -38,61 +38,73 @@ class MarketManager:
             # 1. 새탭에서 스마트스토어 상품 목록 페이지 열기
             if not self._open_smartstore_product_list():
                 logger.error("스마트스토어 상품 목록 페이지 열기 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 2. 전체선택 체크박스 선택
             if not self._select_all_products():
                 logger.error("전체선택 체크박스 선택 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 3. 배송변경 드롭박스에서 배송정보 선택
             if not self._select_delivery_change_option():
                 logger.error("배송변경 옵션 선택 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 4. 배송비 템플릿 버튼 클릭
             if not self._click_delivery_template_button():
                 logger.error("배송비 템플릿 버튼 클릭 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 5. 배송비 템플릿 모달에서 '선택' 클릭
             if not self._select_delivery_template():
                 logger.error("배송비 템플릿 선택 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 6. '주문확인 후 제작' 체크박스 선택
             if not self._select_custom_product_checkbox():
                 logger.error("주문확인 후 제작 체크박스 선택 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 7. 발송예정일 7일 선택
             if not self._select_delivery_period():
                 logger.error("발송예정일 선택 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 8. 변경 버튼 클릭
             if not self._click_change_button():
                 logger.error("변경 버튼 클릭 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 9. 변경 완료 대기 및 모달창 닫기
             if not self._wait_for_change_completion():
                 logger.error("변경 완료 대기 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 10. 모달창 닫기
             if not self._close_delivery_modal():
                 logger.error("모달창 닫기 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 11. 스마트스토어 로그아웃
             if not self._logout_smartstore():
                 logger.error("스마트스토어 로그아웃 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             # 12. 새탭 닫기
             if not self._close_smartstore_tab():
                 logger.error("스마트스토어 탭 닫기 실패")
+                self._ensure_main_tab_focus()
                 return False
             
             logger.info("스마트스토어 배송정보 변경 완료")
@@ -100,11 +112,8 @@ class MarketManager:
             
         except Exception as e:
             logger.error(f"스마트스토어 배송정보 변경 중 오류 발생: {e}")
-            # 오류 발생 시 새탭 닫기 시도
-            try:
-                self._close_smartstore_tab()
-            except:
-                pass
+            # 오류 발생 시 메인 탭으로 확실히 복귀
+            self._ensure_main_tab_focus()
             return False
     
     def _open_smartstore_product_list(self):
@@ -468,4 +477,72 @@ class MarketManager:
                 self.driver.switch_to.window(self.original_window)
             except:
                 pass
+            return False
+    
+    def _ensure_main_tab_focus(self):
+        """
+        메인 퍼센티 탭으로 확실히 복귀하고 불필요한 탭들을 정리합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # 현재 열린 모든 탭 확인
+            all_windows = self.driver.window_handles
+            logger.info(f"현재 열린 탭 수: {len(all_windows)}")
+            
+            main_window = None
+            
+            # 퍼센티 메인 탭 찾기 (URL 기준)
+            for window in all_windows:
+                try:
+                    self.driver.switch_to.window(window)
+                    current_url = self.driver.current_url
+                    logger.info(f"탭 URL 확인: {current_url}")
+                    
+                    if "percenty.com" in current_url:
+                        main_window = window
+                        logger.info(f"퍼센티 메인 탭 발견: {window}")
+                        break
+                except Exception as e:
+                    logger.warning(f"탭 확인 중 오류: {e}")
+                    continue
+            
+            # 메인 탭을 찾지 못한 경우 첫 번째 탭을 메인으로 간주
+            if main_window is None:
+                main_window = all_windows[0]
+                logger.warning("퍼센티 메인 탭을 찾지 못해 첫 번째 탭을 메인으로 설정")
+            
+            # 다른 탭들 모두 닫기
+            for window in all_windows:
+                if window != main_window:
+                    try:
+                        self.driver.switch_to.window(window)
+                        self.driver.close()
+                        logger.info(f"불필요한 탭 닫기 완료: {window}")
+                    except Exception as e:
+                        logger.warning(f"탭 닫기 실패: {e}")
+                        continue
+            
+            # 메인 탭으로 최종 복귀
+            self.driver.switch_to.window(main_window)
+            final_url = self.driver.current_url
+            logger.info(f"메인 탭 복귀 완료 - 현재 URL: {final_url}")
+            
+            # 최종 탭 수 확인
+            final_tab_count = len(self.driver.window_handles)
+            logger.info(f"탭 정리 완료 - 최종 탭 수: {final_tab_count}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"메인 탭 복귀 실패: {e}")
+            # 최소한 첫 번째 탭으로라도 복귀 시도
+            try:
+                all_windows = self.driver.window_handles
+                if all_windows:
+                    self.driver.switch_to.window(all_windows[0])
+                    logger.info("첫 번째 탭으로 복귀 완료")
+            except:
+                logger.error("첫 번째 탭으로 복귀도 실패")
             return False

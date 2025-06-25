@@ -108,6 +108,13 @@ def main():
         
         print("✅ 신규상품등록 화면 전환 성공!")
         
+        # 10-1. 퍼센티 확장프로그램 설치
+        print("\n10-1. 퍼센티 확장프로그램 설치...")
+        if not dynamic_core._install_percenty_extension():
+            print("⚠️ 퍼센티 확장프로그램 설치 실패, 계속 진행합니다")
+        else:
+            print("✅ 퍼센티 확장프로그램 설치 성공!")
+        
         # 11. 동적 업로드 워크플로우 실행
         print("\n11. 동적 업로드 워크플로우 실행...")
         print("    percenty_id.xlsx의 market_id 시트를 기반으로 12번 순환 업로드를 진행합니다.")

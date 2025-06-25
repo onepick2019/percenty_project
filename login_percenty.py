@@ -746,40 +746,61 @@ class PercentyLogin:
     
     def click_product_register(self):
         """
-        신규상품등록 메뉴 클릭 - DOM 선택자 기반으로 변경
+        신규상품등록 메뉴 클릭 - 개선된 DOM 선택자 기반
         
         이전: 좌표 기반 클릭 (coordinates_menu.py)
-        변경: DOM 선택자 기반 클릭 (span.ant-menu-title-content)
+        변경: 다중 DOM 선택자 기반 클릭 (여러 선택자 시도)
         """
         try:
-            # 기존 좌표 값 (폴백용)
-            coords_info = {'coordinates': MENU["PRODUCT_REGISTER"]}
+            # 다양한 선택자 시도 목록
+            selectors = [
+                "//span[@class='ant-menu-title-content' and text()='신규 상품 등록']",
+                "//span[contains(@class, 'ant-menu-title-content') and contains(text(), '신규')]",
+                "//span[contains(text(), '신규 상품 등록')]",
+                "//li[contains(@class, 'ant-menu-item')]//span[contains(text(), '신규')]",
+                "//a[contains(@href, 'product') and contains(@href, 'register')]//span",
+                "//div[contains(@class, 'ant-menu')]//span[contains(text(), '신규')]"
+            ]
             
-            # DOM 선택자 - span.ant-menu-title-content 중에서 '신규 상품 등록' 텍스트를 가진 요소
-            dom_info = {'selector': ('xpath', "//span[@class='ant-menu-title-content' and text()='신규 상품 등록']")} 
+            success = False
             
-            # 디버깅용 강조 표시 (요소 찾기 확인)
-            try:
-                highlight_element(self.driver, dom_info, 1)
-            except:
-                logging.warning("신규상품등록 메뉴 요소 강조 표시 실패")
+            # 각 선택자 순차적으로 시도
+            for i, selector in enumerate(selectors, 1):
+                try:
+                    logging.info(f"신규상품등록 메뉴 선택자 {i} 시도: {selector}")
+                    
+                    # 요소 찾기 및 클릭
+                    element = WebDriverWait(self.driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    
+                    # JavaScript 클릭 시도
+                    self.driver.execute_script("arguments[0].click();", element)
+                    logging.info(f"신규상품등록 메뉴 선택자 {i} 클릭 성공")
+                    success = True
+                    break
+                    
+                except Exception as e:
+                    logging.warning(f"신규상품등록 메뉴 선택자 {i} 실패: {e}")
+                    continue
             
-            # DOM 기반 클릭 시도
-            logging.info("신규상품등록 메뉴 DOM 기반 클릭 시도")
-            result = smart_click(self.driver, dom_info, "신규상품등록 메뉴")
-            
-            # DOM 클릭 실패 시 좌표 기반으로 폴백
-            if not result:
-                logging.warning("DOM 기반 클릭 실패, 좌표 기반 클릭으로 대체합니다")
+            # 모든 선택자 실패 시 좌표 기반으로 폴백
+            if not success:
+                logging.warning("모든 DOM 선택자 실패, 좌표 기반 클릭으로 대체합니다")
+                coords_info = {'coordinates': MENU["PRODUCT_REGISTER"], 'fallback_order': ['coordinates']}
                 result = smart_click(self.driver, coords_info, "신규상품등록 메뉴(좌표)")
+                success = result.get('success', False) if isinstance(result, dict) else bool(result)
             
-            sleep_with_logging(MENU_NAVIGATION["PRODUCT_REGISTER"], "신규상품등록 메뉴 클릭 후 대기")
-            
-            # 스크롤을 최상단으로 초기화
-            self.driver.execute_script("window.scrollTo(0, 0);")
-            logging.info("스크롤 위치를 최상단으로 초기화했습니다")
-            
-            return result
+            if success:
+                 sleep_with_logging(MENU_NAVIGATION["PRODUCT_REGISTER"], "신규상품등록 메뉴 클릭 후 대기")
+                 
+                 # 스크롤을 최상단으로 초기화
+                 self.driver.execute_script("window.scrollTo(0, 0);")
+                 logging.info("스크롤 위치를 최상단으로 초기화했습니다")
+                 return True
+            else:
+                 logging.error("신규상품등록 메뉴 클릭 - 모든 방법 실패")
+                 return False
         except Exception as e:
             logging.error(f"신규상품등록 메뉴 클릭 중 오류 발생: {e}")
             return False
@@ -895,6 +916,7 @@ class PercentyLogin:
             return result
         except Exception as e:
             logging.error(f"마켓설정 메뉴 클릭 중 오류 발생: {e}")
+            self._ensure_main_tab_focus()
             return False
             
     def click_saveid_checkbox(self, checkbox_x, checkbox_y):
@@ -1026,6 +1048,74 @@ class PercentyLogin:
             return True
         except Exception as e:
             logging.error(f"로그인 중 오류 발생: {e}")
+            return False
+    
+    def _ensure_main_tab_focus(self):
+        """
+        메인 퍼센티 탭으로 확실히 복귀하고 불필요한 탭들을 정리합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # 현재 열린 모든 탭 확인
+            all_windows = self.driver.window_handles
+            logging.info(f"현재 열린 탭 수: {len(all_windows)}")
+            
+            main_window = None
+            
+            # 퍼센티 메인 탭 찾기 (URL 기준)
+            for window in all_windows:
+                try:
+                    self.driver.switch_to.window(window)
+                    current_url = self.driver.current_url
+                    logging.info(f"탭 URL 확인: {current_url}")
+                    
+                    if "percenty.com" in current_url:
+                        main_window = window
+                        logging.info(f"퍼센티 메인 탭 발견: {window}")
+                        break
+                except Exception as e:
+                    logging.warning(f"탭 확인 중 오류: {e}")
+                    continue
+            
+            # 메인 탭을 찾지 못한 경우 첫 번째 탭을 메인으로 간주
+            if main_window is None:
+                main_window = all_windows[0]
+                logging.warning("퍼센티 메인 탭을 찾지 못해 첫 번째 탭을 메인으로 설정")
+            
+            # 다른 탭들 모두 닫기
+            for window in all_windows:
+                if window != main_window:
+                    try:
+                        self.driver.switch_to.window(window)
+                        self.driver.close()
+                        logging.info(f"불필요한 탭 닫기 완료: {window}")
+                    except Exception as e:
+                        logging.warning(f"탭 닫기 실패: {e}")
+                        continue
+            
+            # 메인 탭으로 최종 복귀
+            self.driver.switch_to.window(main_window)
+            final_url = self.driver.current_url
+            logging.info(f"메인 탭 복귀 완료 - 현재 URL: {final_url}")
+            
+            # 최종 탭 수 확인
+            final_tab_count = len(self.driver.window_handles)
+            logging.info(f"탭 정리 완료 - 최종 탭 수: {final_tab_count}")
+            
+            return True
+            
+        except Exception as e:
+            logging.error(f"메인 탭 복귀 실패: {e}")
+            # 최소한 첫 번째 탭으로라도 복귀 시도
+            try:
+                all_windows = self.driver.window_handles
+                if all_windows:
+                    self.driver.switch_to.window(all_windows[0])
+                    logging.info("첫 번째 탭으로 복귀 완료")
+            except:
+                logging.error("첫 번째 탭으로 복귀도 실패")
             return False
     
     def close_driver(self):
