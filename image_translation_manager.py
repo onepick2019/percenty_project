@@ -110,34 +110,35 @@ class ImageTranslationManager:
         try:
             action_value = action_value.strip().lower()
             
-            # specific:all의 경우 NewImageTranslationHandler 사용 (순차 처리 최적화)
+            # 모든 케이스에서 통합 방식을 사용하는 NewImageTranslationHandler 사용
+            # specific:all의 경우
             if action_value == "specific:all":
-                logger.info("specific:all 감지 - NewImageTranslationHandler 사용 (순차 처리 최적화)")
+                logger.info("specific:all 감지 - NewImageTranslationHandler 사용 (통합 순차 처리)")
                 return self.new_handler
             
-            # auto_detect_chinese의 경우 SpecificImageTranslationHandler 사용
+            # auto_detect_chinese의 경우도 통합 방식 사용
             if action_value == "auto_detect_chinese":
-                logger.info("auto_detect_chinese 감지 - SpecificImageTranslationHandler 사용")
-                return self.specific_handler
+                logger.info("auto_detect_chinese 감지 - NewImageTranslationHandler 사용 (통합 처리)")
+                return self.new_handler
             
-            # first:N, last:N 패턴의 경우 SpecificImageTranslationHandler 사용
+            # first:N, last:N 패턴의 경우도 통합 방식 사용
             if action_value.startswith(("first:", "last:")):
-                logger.info(f"{action_value} 감지 - SpecificImageTranslationHandler 사용 (개별 위치 처리 최적화)")
-                return self.specific_handler
+                logger.info(f"{action_value} 감지 - NewImageTranslationHandler 사용 (통합 처리)")
+                return self.new_handler
             
-            # specific:N,N,N 패턴의 경우 SpecificImageTranslationHandler 사용
+            # specific:N,N,N 패턴의 경우도 통합 방식 사용
             if action_value.startswith("specific:") and "," in action_value:
-                logger.info(f"{action_value} 감지 - SpecificImageTranslationHandler 사용 (특정 위치 처리 최적화)")
-                return self.specific_handler
+                logger.info(f"{action_value} 감지 - NewImageTranslationHandler 사용 (통합 처리)")
+                return self.new_handler
             
-            # 숫자 리스트 (1,2,3 등)의 경우 SpecificImageTranslationHandler 사용
+            # 숫자 리스트 (1,2,3 등)의 경우도 통합 방식 사용
             if self._is_position_list(action_value):
-                logger.info(f"{action_value} 감지 - SpecificImageTranslationHandler 사용 (위치 리스트 처리)")
-                return self.specific_handler
+                logger.info(f"{action_value} 감지 - NewImageTranslationHandler 사용 (통합 처리)")
+                return self.new_handler
             
-            # 기본값: SpecificImageTranslationHandler 사용
-            logger.warning(f"알 수 없는 액션 패턴: {action_value} - SpecificImageTranslationHandler 기본 사용")
-            return self.specific_handler
+            # 기본값: 통합 방식을 사용하는 NewImageTranslationHandler 사용
+            logger.warning(f"알 수 없는 액션 패턴: {action_value} - NewImageTranslationHandler 기본 사용 (통합 처리)")
+            return self.new_handler
             
         except Exception as e:
             logger.error(f"핸들러 선택 오류: {e}")

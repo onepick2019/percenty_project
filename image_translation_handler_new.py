@@ -166,12 +166,15 @@ class ImageTranslationHandler:
                     self.logger.info(f"first 형식 파싱: {pos} -> {list(range(1, num + 1))}")
                 except (IndexError, ValueError):
                     self.logger.warning(f"잘못된 first 형식: {pos}")
-            # "last:숫자" 형식인 경우
+            # "last:숫자" 형식인 경우 (마지막부터 지정된 개수만큼)
             elif pos.startswith('last:'):
                 try:
                     num = int(pos.split(':')[1])
-                    positions.append(num)
-                    self.logger.info(f"last 형식 파싱: {pos} -> {num}")
+                    # last:1은 마지막 1개, last:2는 마지막 2개를 의미
+                    # 실제 이미지 개수를 확인해야 하므로 임시로 음수로 저장
+                    # 나중에 실제 이미지 개수를 확인한 후 계산
+                    positions.append(f'last:{num}')
+                    self.logger.info(f"last 형식 파싱: {pos} -> last:{num} (실제 위치는 이미지 개수 확인 후 계산)")
                 except (IndexError, ValueError):
                     self.logger.warning(f"잘못된 last 형식: {pos}")
             # "specific:숫자" 형식인 경우 (특정 위치 지정)
@@ -188,6 +191,10 @@ class ImageTranslationHandler:
                         self.logger.info(f"specific 형식 파싱: {pos} -> {num}")
                 except (IndexError, ValueError):
                     self.logger.warning(f"잘못된 specific 형식: {pos}")
+            # "auto_detect_chinese" 형식인 경우 (중문글자 자동 감지)
+            elif pos == 'auto_detect_chinese':
+                self.logger.info("auto_detect_chinese 형식 - 중문글자 자동 감지 모드")
+                positions.append('auto_detect_chinese')
             else:
                 self.logger.warning(f"잘못된 이미지 위치 값: {pos}")
         
@@ -204,65 +211,72 @@ class ImageTranslationHandler:
         return action_info
             
     def _process_image_translate_action(self, action_info):
-        """이미지 번역 액션 처리 - 기존 방식과 새로운 방식 통합"""
+        """이미지 번역 액션 처리 - 통합 방식으로 모든 케이스 처리"""
         try:
             positions = action_info.get('positions', [])
             self.logger.info(f"이미지 번역 처리 시작 - 위치: {positions}")
             
-            # sequential_all 모드인 경우 새로운 순차 처리 방식 사용
+            # auto_detect_chinese 모드인 경우 중문글자 감지 후 통합 처리
+            if 'auto_detect_chinese' in positions:
+                self.logger.info("중문글자 자동 감지 모드 실행")
+                # 중문글자 감지 기능은 SpecificImageTranslationHandler에서 가져와야 함
+                # 현재는 모든 이미지를 순차 처리하는 방식으로 대체
+                return self._process_all_images_sequentially()
+            
+            # sequential_all 모드인 경우 전체 이미지 스캔 방식 사용
             if 'sequential_all' in positions:
                 return self._process_all_images_sequentially()
             else:
-                # 기존 방식: 개별 위치 처리
-                return self._process_specific_positions(positions)
+                # 특정 위치들은 해당 위치만 처리하는 방식 사용
+                return self._process_specific_positions_unified(positions)
                 
         except Exception as e:
             self.logger.error(f"이미지 번역 액션 처리 오류: {e}")
             return False
             
-    def _process_specific_positions(self, positions):
-        """개별 위치 처리 (기존 방식)"""
-        try:
-            success_count = 0
-            total_count = len(positions)
-            
-            for position in positions:
-                try:
-                    self.logger.info(f"이미지 위치 {position} 번역 시작")
-                    
-                    # 편집 버튼 클릭
-                    if not self._click_edit_button_by_position(position):
-                        self.logger.error(f"이미지 위치 {position} 편집 버튼 클릭 실패")
-                        continue
-                    
-                    # 이미지 번역 모달 대기
-                    if not self._wait_for_image_translation_modal():
-                        self.logger.error(f"이미지 위치 {position} 번역 모달 대기 실패")
-                        continue
-                    
-                    # 현재 이미지 처리
-                    if self._process_current_image():
-                        success_count += 1
-                        self.logger.info(f"이미지 위치 {position} 번역 성공")
-                    
-                    # 번역 모달 닫기
-                    self._close_image_translation_modal()
-                    self.human_delay.short_delay()
-                    
-                except Exception as e:
-                    self.logger.error(f"이미지 위치 {position} 번역 오류: {e}")
-                    continue
-            
-            # 변경사항 저장 (한 번만)
-            if success_count > 0:
-                self._save_changes()
-            
-            self.logger.info(f"개별 위치 처리 완료 - 성공: {success_count}/{total_count}")
-            return success_count > 0
-            
-        except Exception as e:
-            self.logger.error(f"개별 위치 처리 오류: {e}")
-            return False
+    # def _process_specific_positions(self, positions):
+    #     """개별 위치 처리 (기존 방식) - 통합 방식으로 대체됨"""
+    #    try:
+    #         success_count = 0
+    #         total_count = len(positions)
+    #         
+    #         for position in positions:
+    #             try:
+    #                 self.logger.info(f"이미지 위치 {position} 번역 시작")
+    #                 
+    #                 # 편집 버튼 클릭
+    #                 if not self._click_edit_button_by_position(position):
+    #                     self.logger.error(f"이미지 위치 {position} 편집 버튼 클릭 실패")
+    #                     continue
+    #                 
+    #                 # 이미지 번역 모달 대기
+    #                 if not self._wait_for_image_translation_modal():
+    #                     self.logger.error(f"이미지 위치 {position} 번역 모달 대기 실패")
+    #                     continue
+    #                 
+    #                 # 현재 이미지 처리
+    #                 if self._process_current_image():
+    #                     success_count += 1
+    #                     self.logger.info(f"이미지 위치 {position} 번역 성공")
+    #                 
+    #                 # 번역 모달 닫기
+    #                 self._close_image_translation_modal()
+    #                 self.human_delay.short_delay()
+    #                 
+    #             except Exception as e:
+    #                 self.logger.error(f"이미지 위치 {position} 번역 오류: {e}")
+    #                 continue
+    #         
+    #         # 변경사항 저장 (한 번만)
+    #         if success_count > 0:
+    #             self._save_changes()
+    #         
+    #         self.logger.info(f"개별 위치 처리 완료 - 성공: {success_count}/{total_count}")
+    #         return success_count > 0
+    #         
+    #     except Exception as e:
+    #         self.logger.error(f"개별 위치 처리 오류: {e}")
+    #         return False
             
     def _process_all_images_sequentially(self):
         """모든 이미지 순차 처리 (새로운 방식) - 먼저 스캔 후 번역"""
@@ -276,7 +290,7 @@ class ImageTranslationHandler:
             self.logger.info(f"총 {total_images}개의 이미지 스캔 및 번역 처리 시작")
             
             # 첫 번째 편집 버튼 클릭
-            if not self._click_first_edit_button():
+            if not self._click_first_image_bulk_edit_button():
                 return False
                 
             # 이미지 번역 모달 대기
@@ -310,8 +324,111 @@ class ImageTranslationHandler:
             self.logger.error(f"스캔 및 번역 처리 오류: {e}")
             return False
             
+    def _process_specific_positions_unified(self, positions):
+        """특정 위치 이미지만 처리하는 통합 방식"""
+        try:
+            self.logger.info(f"특정 위치 이미지 번역 처리 시작 - 위치: {positions}")
+            
+            # last: 형식을 실제 위치로 변환
+            converted_positions = []
+            total_images = None
+            
+            for pos in positions:
+                if isinstance(pos, str) and pos.startswith('last:'):
+                    # 총 이미지 개수를 아직 확인하지 않았다면 확인
+                    if total_images is None:
+                        total_images = self._get_total_image_count()
+                        self.logger.info(f"총 이미지 개수 확인: {total_images}개")
+                    
+                    # last:숫자에서 숫자 추출
+                    try:
+                        num = int(pos.split(':')[1])
+                        # 마지막부터 num개의 위치 계산
+                        if total_images > 0:
+                            # last:1이면 마지막 1개 (예: 총 5개면 5번째)
+                            # last:2이면 마지막 2개 (예: 총 5개면 4,5번째)
+                            start_pos = max(1, total_images - num + 1)
+                            for i in range(start_pos, total_images + 1):
+                                converted_positions.append(i)
+                            self.logger.info(f"last:{num} -> 위치 {list(range(start_pos, total_images + 1))} (총 {total_images}개 이미지)")
+                        else:
+                            self.logger.warning(f"이미지가 없어서 {pos}를 처리할 수 없음")
+                    except (IndexError, ValueError) as e:
+                        self.logger.warning(f"잘못된 last 형식: {pos}, 오류: {e}")
+                        converted_positions.append(pos)  # 원본 유지
+                else:
+                    converted_positions.append(pos)
+            
+            # 중복 제거 및 정렬
+            converted_positions = sorted(list(set(converted_positions)))
+            self.logger.info(f"위치 변환 완료: {positions} -> {converted_positions}")
+            
+            # 이미지 번역 모달창이 이미 열려있는지 확인
+            modal_already_open = self._check_modal_open()
+            
+            if not modal_already_open:
+                # 이미지 번역 모달창이 열려있지 않은 경우 첫 번째 이미지의 일괄편집 버튼 클릭
+                self.logger.info("이미지 번역 모달창이 닫혀있음 - 첫 번째 이미지 일괄편집 버튼 클릭")
+                if not self._click_first_image_bulk_edit_button():
+                    self.logger.error("첫 번째 이미지 일괄편집 버튼 클릭 실패")
+                    return False
+                    
+                # 이미지 번역 모달창이 열릴 때까지 대기
+                if not self._wait_for_image_translation_modal():
+                    self.logger.error("이미지 번역 모달창 열기 실패")
+                    return False
+            else:
+                self.logger.info("이미지 번역 모달창이 이미 열려있음 - 바로 번역 처리 진행")
+                
+            # 지정된 위치의 이미지들만 번역 처리
+            processed_count = self._process_specific_images_for_translation(converted_positions)
+            
+            # 변경사항 저장 (한 번만)
+            if processed_count > 0:
+                self._save_changes()
+            
+            # 모달 닫기 (새로 연 경우에만)
+            if not modal_already_open:
+                self._close_image_translation_modal()
+            
+            self.logger.info(f"특정 위치 이미지 번역 처리 완료: {processed_count}/{len(converted_positions)}개 처리됨")
+            return processed_count > 0
+            
+        except Exception as e:
+            self.logger.error(f"특정 위치 이미지 번역 처리 오류: {e}")
+            return False
+            
+    def _check_modal_open(self):
+        """이미지 번역 모달창이 열려있는지 확인 (실제 이미지 번역 모달창만 감지)"""
+        try:
+            # 이미지 번역 모달창 특정 선택자들 (상세페이지 일괄편집 모달창과 구분)
+            image_translation_modal_selectors = [
+                "//div[contains(@class, 'ant-modal')]//span[contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-drawer')]//span[contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-modal')]//div[contains(@class, 'ant-modal-title') and contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-drawer')]//div[contains(@class, 'ant-drawer-title') and contains(text(), '이미지 번역')]",
+                # 이미지 번역 모달창 내부의 특정 요소들
+                "//div[contains(@class, 'ant-modal')]//button[contains(text(), '원클릭 이미지 번역')]",
+                "//div[contains(@class, 'ant-drawer')]//button[contains(text(), '원클릭 이미지 번역')]"
+            ]
+            
+            for selector in image_translation_modal_selectors:
+                try:
+                    element = self.driver.find_element(By.XPATH, selector)
+                    if element and element.is_displayed():
+                        self.logger.info(f"이미지 번역 모달창 열림 확인: {selector}")
+                        return True
+                except Exception:
+                    continue
+                    
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"이미지 번역 모달창 상태 확인 오류: {e}")
+            return False
+            
     def _click_edit_button_by_position(self, position):
-        """위치별 편집 버튼 클릭 (기존 방식 호환)"""
+        """위치별 편집 버튼 클릭 (안정적인 선택자 사용)"""
         try:
             self.logger.info(f"이미지 위치 {position} 편집 버튼 클릭 시도")
             
@@ -320,7 +437,10 @@ class ImageTranslationHandler:
                 f"(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[{position}]",
                 f"(//div[contains(@class, 'sc-kTbCBX') or contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[{position}]",
                 f"(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[{position}]",
-                f"(//span[text()='편집하기'])[{position}]"
+                f"(//span[text()='편집하기'])[{position}]",
+                # 현재 DOM 구조에 맞는 추가 선택자들
+                f"(//div[contains(@class, 'sc-bOTbmH') and contains(@class, 'hDwhsl')])[{position}]",
+                f"(//div[contains(@class, 'sc-bOTbmH')]//span[contains(text(), '편집하기')])[{position}]/parent::div"
             ]
             
             for selector in edit_button_selectors:
@@ -436,8 +556,16 @@ class ImageTranslationHandler:
                 return 0
                 
             # 모달창 내에서만 이미지 검색
-            # 사용자 제공 DOM 구조: img class="sc-kpkpHi hJsbdH p_tooltip_image_editor_thumb" src="https://cbu01.alicdn.com/img/..."
+            # 사용자 제공 DOM 구조: <div class="sc-hMxIkD byPQOP"><span><img class="sc-eSoiBi ipHRUV p_tooltip_image_editor_thumb" src="https://cbu01.alicdn.com/img/..."
             selectors = [
+                # 컨테이너 div 기반 선택자 (사용자 제공 DOM 구조)
+                ".//div[contains(@class, 'sc-hMxIkD') and contains(@class, 'byPQOP')]//img[contains(@class, 'p_tooltip_image_editor_thumb')]",
+                ".//div[contains(@class, 'sc-hMxIkD')]//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb')]",
+                # 가장 구체적인 이미지 선택자
+                ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')]",
+                # 클래스 조합 선택자
+                ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')]",
+                # 기존 선택자들 (호환성 유지)
                 ".//img[contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'https://cbu01.alicdn.com/img')]",
                 ".//img[contains(@src, 'https://cbu01.alicdn.com/img')]"
             ]
@@ -468,15 +596,90 @@ class ImageTranslationHandler:
             self.logger.error(f"이미지 개수 확인 실패: {e}")
             return 0
             
-    def _click_first_edit_button(self):
-        """첫 번째 편집 버튼 클릭 - 원본 파일의 정확한 선택자 사용"""
+    # def _click_first_edit_button(self):
+    #     """첫 번째 편집 버튼 클릭 - _click_first_image_bulk_edit_button로 대체됨"""
+    #     try:
+    #         # 편집 버튼 선택자들 (첫 번째 위치) - 원본 파일에서 검증된 선택자 사용
+    #         edit_button_selectors = [
+    #             "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+    #             "(//div[contains(@class, 'sc-kTbCBX') or contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[1]",
+    #             "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+    #             "(//span[text()='편집하기'])[1]"
+    #         ]
+    #         
+    #         for selector in edit_button_selectors:
+    #             try:
+    #                 edit_btn = self.driver.find_element(By.XPATH, selector)
+    #                 if edit_btn.is_displayed():
+    #                     # 스크롤하여 요소가 보이도록 함
+    #                     self.driver.execute_script("arguments[0].scrollIntoView(true);", edit_btn)
+    #                     time.sleep(0.1)
+    #                     
+    #                     # 클릭 (부모 요소 클릭 시도)
+    #                     try:
+    #                         edit_btn.click()
+    #                         self.logger.info("첫 번째 편집 버튼 클릭 성공 (일반 클릭)")
+    #                     except Exception:
+    #                         # JavaScript 클릭 시도
+    #                         self.driver.execute_script("arguments[0].click();", edit_btn)
+    #                         self.logger.info("첫 번째 편집 버튼 클릭 성공 (JavaScript 클릭)")
+    #                     
+    #                     self.human_delay.short_delay()  # 모달 로딩 대기
+    #                     return True
+    #             except Exception as e:
+    #                 self.logger.debug(f"편집 버튼 선택자 {selector} 실패: {e}")
+    #                 continue
+    #         
+    #         self.logger.error("첫 번째 편집 버튼을 찾을 수 없습니다")
+    #         return False
+    #         
+    #     except Exception as e:
+    #         self.logger.error(f"첫 번째 편집 버튼 클릭 실패: {e}")
+    #         return False
+            
+    def _click_first_image_bulk_edit_button(self):
+        """첫 번째 이미지 컨테이너의 일괄편집 버튼 클릭하여 이미지 번역 모달창 열기"""
         try:
-            # 편집 버튼 선택자들 (첫 번째 위치) - 원본 파일에서 검증된 선택자 사용
+            self.logger.info("첫 번째 이미지 컨테이너의 일괄편집 버튼 클릭 시도")
+            
+            # 먼저 현재 페이지에서 편집 관련 버튼들을 찾아보기
+            try:
+                # '일괄편집' 및 '편집하기' 버튼 모두 검색
+                all_edit_buttons = self.driver.find_elements(By.XPATH, "//button[contains(text(), '일괄편집') or .//span[contains(text(), '일괄편집')] or contains(text(), '편집하기') or .//span[contains(text(), '편집하기')]]")
+                self.logger.info(f"페이지에서 발견된 편집 버튼 개수: {len(all_edit_buttons)}")
+                
+                for i, btn in enumerate(all_edit_buttons):
+                    try:
+                        btn_text = btn.text
+                        btn_displayed = btn.is_displayed()
+                        btn_enabled = btn.is_enabled()
+                        self.logger.info(f"편집 버튼 {i+1}: 텍스트='{btn_text}', 표시됨={btn_displayed}, 활성화됨={btn_enabled}")
+                    except Exception as e:
+                        self.logger.debug(f"편집 버튼 {i+1} 정보 확인 실패: {e}")
+            except Exception as e:
+                self.logger.debug(f"편집 버튼 전체 검색 실패: {e}")
+            
+            # 첫 번째 이미지 컨테이너의 편집 버튼 선택자들 (주석처리된 안정적인 선택자 적용)
             edit_button_selectors = [
+                # 주석처리된 코드에서 가져온 안정적인 선택자들 (첫 번째 이미지용)
                 "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
                 "(//div[contains(@class, 'sc-kTbCBX') or contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[1]",
                 "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
-                "(//span[text()='편집하기'])[1]"
+                "(//span[text()='편집하기'])[1]",
+                # 현재 DOM 구조에 맞는 추가 선택자들
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH') and contains(@class, 'hDwhsl')]",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]//span[contains(text(), '편집하기')]/parent::div",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
+                # 이미지와 연관된 편집하기 버튼
+                "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//img[contains(@class, 'iNuYXT')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                # 편집 아이콘과 텍스트가 있는 div
+                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                # 기존 일괄편집 버튼도 유지 (호환성)
+                "(//button[contains(text(), '일괄편집')])[1]",
+                "(//span[contains(text(), '일괄편집')])[1]/parent::button",
+                "//div[contains(@class, 'ant-drawer-body')]//button[contains(text(), '일괄편집')][1]"
             ]
             
             for selector in edit_button_selectors:
@@ -485,55 +688,78 @@ class ImageTranslationHandler:
                     if edit_btn.is_displayed():
                         # 스크롤하여 요소가 보이도록 함
                         self.driver.execute_script("arguments[0].scrollIntoView(true);", edit_btn)
-                        time.sleep(0.1)
+                        time.sleep(0.2)
                         
-                        # 클릭 (부모 요소 클릭 시도)
+                        # 클릭 시도
                         try:
                             edit_btn.click()
-                            self.logger.info("첫 번째 편집 버튼 클릭 성공 (일반 클릭)")
+                            self.logger.info(f"첫 번째 이미지 편집 버튼 클릭 성공 (일반 클릭): {selector}")
                         except Exception:
                             # JavaScript 클릭 시도
                             self.driver.execute_script("arguments[0].click();", edit_btn)
-                            self.logger.info("첫 번째 편집 버튼 클릭 성공 (JavaScript 클릭)")
+                            self.logger.info(f"첫 번째 이미지 편집 버튼 클릭 성공 (JavaScript 클릭): {selector}")
                         
-                        self.human_delay.short_delay()  # 모달 로딩 대기
+                        self.human_delay.medium_delay()  # 이미지 번역 모달 로딩 대기
                         return True
+                        
                 except Exception as e:
                     self.logger.debug(f"편집 버튼 선택자 {selector} 실패: {e}")
                     continue
             
-            self.logger.error("첫 번째 편집 버튼을 찾을 수 없습니다")
+            self.logger.error("첫 번째 이미지 컨테이너의 편집 버튼을 찾을 수 없습니다")
             return False
             
         except Exception as e:
-            self.logger.error(f"첫 번째 편집 버튼 클릭 실패: {e}")
+            self.logger.error(f"첫 번째 이미지 편집 버튼 클릭 실패: {e}")
             return False
             
     def _wait_for_image_translation_modal(self):
-        """이미지 번역 모달 대기"""
+        """이미지 번역 모달 대기 - 실제 이미지 번역 모달창 감지"""
         try:
-            selectors = [
+            self.logger.info("이미지 번역 모달창 열림 대기 시작")
+            
+            # 이미지 번역 모달창의 특정 요소들을 감지
+            modal_selectors = [
+                # 이미지 번역 모달창 제목
+                "//div[contains(@class, 'ant-modal')]//span[contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-drawer')]//span[contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-modal-title') and contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-drawer-title') and contains(text(), '이미지 번역')]",
+                # 이미지 번역 모달창 내부의 특정 요소들
+                "//button[contains(text(), '원클릭 이미지 번역')]",
+                "//div[contains(@class, 'ant-modal')]//button[contains(text(), '원클릭 이미지 번역')]",
+                "//div[contains(@class, 'ant-drawer')]//button[contains(text(), '원클릭 이미지 번역')]",
+                # 캔버스 요소 (이미지 번역 모달창 내부)
                 "#pCanvas",
                 "canvas[id='pCanvas']",
-                ".image-translation-modal",
-                "[class*='translation'][class*='modal']"
+                "//canvas[@id='pCanvas']"
             ]
             
-            for selector in selectors:
-                try:
-                    WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
-                    )
-                    time.sleep(2)
-                    return True
-                except:
-                    continue
-                    
-            self.logger.error("이미지 번역 모달을 찾을 수 없습니다")
+            # 10초 동안 모달창 요소 감지 시도
+            for attempt in range(20):  # 0.5초씩 20번 = 10초
+                for selector in modal_selectors:
+                    try:
+                        if selector.startswith('//'):
+                            # XPath 선택자
+                            element = self.driver.find_element(By.XPATH, selector)
+                        else:
+                            # CSS 선택자
+                            element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                            
+                        if element and element.is_displayed():
+                            self.logger.info(f"이미지 번역 모달창 열림 확인: {selector}")
+                            time.sleep(1)  # 모달창 완전 로딩 대기
+                            return True
+                    except Exception:
+                        continue
+                        
+                time.sleep(0.5)  # 0.5초 대기 후 재시도
+                
+            self.logger.error("이미지 번역 모달창 열림 대기 시간 초과 (10초)")
             return False
             
         except Exception as e:
-            self.logger.error(f"이미지 번역 모달 대기 실패: {e}")
+            self.logger.error(f"이미지 번역 모달창 대기 실패: {e}")
             return False
             
     def _process_current_image(self):
@@ -718,7 +944,7 @@ class ImageTranslationHandler:
     def _wait_for_translation_complete(self):
         """번역 완료 대기 - '원클릭 이미지 번역' 버튼 상태 변화 감지"""
         try:
-            max_wait_time = 20  # 최대 20초 대기 (최적화)
+            max_wait_time = 60  # 최대 60초 대기 (최적화)
             check_interval = 0.5  # 0.5초마다 확인 (더 빠른 감지)
             elapsed_time = 0
             consecutive_normal_checks = 0  # 연속으로 정상 상태를 확인한 횟수
@@ -981,8 +1207,17 @@ class ImageTranslationHandler:
     def _move_to_image_position_dom(self, target_position):
         """DOM 기반으로 특정 이미지 위치로 정확히 이동"""
         try:
-            # 이미지 컨테이너 내에서 특정 위치의 이미지를 직접 선택
+            # 사용자 제공 DOM 구조 기반 개선된 선택자
+            # <div class="sc-hMxIkD byPQOP"><span><img class="sc-eSoiBi ipHRUV p_tooltip_image_editor_thumb" src="https://cbu01.alicdn.com/img/..."
             image_selectors = [
+                # 컨테이너 div 기반 선택자 (사용자 제공 DOM 구조)
+                f"(//div[contains(@class, 'sc-hMxIkD') and contains(@class, 'byPQOP')]//img[contains(@class, 'p_tooltip_image_editor_thumb')])[{target_position}]",
+                f"(//div[contains(@class, 'sc-hMxIkD')]//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb')])[{target_position}]",
+                # 가장 구체적인 이미지 선택자
+                f"(//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')])[{target_position}]",
+                # 클래스 조합 선택자
+                f"(//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')])[{target_position}]",
+                # 기존 선택자들 (호환성 유지)
                 f"(//div[contains(@class, 'sc-eSoiBi')]//img[contains(@class, 'p_tooltip_image_editor_thumb')])[{target_position}]",
                 f"(//div[contains(@class, 'ant-drawer-content')]//img[contains(@src, 'https://cbu01.alicdn.com/img')])[{target_position}]",
                 f"(//img[contains(@class, 'sc-kpkpHi') and contains(@src, 'cbu01.alicdn.com')])[{target_position}]",

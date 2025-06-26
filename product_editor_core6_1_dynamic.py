@@ -20,6 +20,7 @@ from dropdown_utils4 import DropdownUtils4
 from upload_utils import UploadUtils
 from market_manager import MarketManager
 from market_utils import MarketUtils
+from market_manager_cafe24 import MarketManagerCafe24
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,11 @@ class ProductEditorCore6_1Dynamic:
                     'coupang_code': safe_get(row.get('coupang_code', '')),  # M열
                     'coupang_access': safe_get(row.get('coupang_access', '')),  # N열
                     'coupang_secret': safe_get(row.get('coupang_secret', '')),  # O열
+                    'coupang_password': safe_get(row.get('coupang_password', '')),  # P열
+                    'cafe24_server': safe_get(row.get('cafe24_server', '')),  # Q열
+                    'cafe24_id': safe_get(row.get('cafe24_id', '')),  # R열
+                    'cafe24_password': safe_get(row.get('cafe24_password', '')),  # S열
+                    '11store_id': safe_get(row.get('11store_id', '')),  # T열
                     'row_index': idx + 1  # 행 번호 (1부터 시작)
                 }
                 market_configs.append(config)
@@ -124,6 +130,16 @@ class ProductEditorCore6_1Dynamic:
                     api_info.append(f"쿠팡ACCESS={config['coupang_access'][:10]}...")
                 if config['coupang_secret']:
                     api_info.append(f"쿠팡SECRET={config['coupang_secret'][:10]}...")
+                if config['coupang_password']:
+                    api_info.append(f"쿠팡PW={config['coupang_password'][:5]}...")
+                if config['cafe24_server']:
+                    api_info.append(f"카페24서버={config['cafe24_server']}")
+                if config['cafe24_id']:
+                    api_info.append(f"카페24ID={config['cafe24_id']}")
+                if config['cafe24_password']:
+                    api_info.append(f"카페24PW={config['cafe24_password'][:5]}...")
+                if config['11store_id']:
+                    api_info.append(f"11번가ID={config['11store_id']}")
                 
                 api_info_str = ", ".join(api_info) if api_info else "API 키 없음"
                 logger.info(f"마켓 설정 {idx+1}: 그룹명={config['groupname']}, {api_info_str}")
@@ -432,6 +448,45 @@ class ProductEditorCore6_1Dynamic:
                 pass
             return False
     
+    def _detect_and_close_modal(self):
+        """
+        퍼센티 상담 모달창을 감지하고 닫습니다.
+        
+        Returns:
+            bool: 모달창을 감지하고 닫았는지 여부
+        """
+        try:
+            # 모달창 감지 (퍼센티 상담 팝업)
+            modal_selectors = [
+                "div[class*='PCFullscreenPopupContent']",
+                "div[role='button'][class*='PCFullscreenPopupContent']",
+                "button[class*='PopupCloseBtn__CloseButton']"
+            ]
+            
+            for selector in modal_selectors:
+                try:
+                    modal_element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if modal_element and modal_element.is_displayed():
+                        logger.info("퍼센티 상담 모달창 감지됨")
+                        
+                        # 닫기 버튼 찾기 및 클릭
+                        close_button = self.driver.find_element(By.CSS_SELECTOR, "button[class*='PopupCloseBtn__CloseButton']")
+                        if close_button and close_button.is_displayed():
+                            close_button.click()
+                            logger.info("모달창 닫기 버튼 클릭 완료")
+                            time.sleep(1)  # 모달창 닫힘 대기
+                            return True
+                        break
+                except Exception as e:
+                    # 해당 셀렉터로 요소를 찾지 못한 경우 다음 셀렉터 시도
+                    continue
+            
+            return False
+            
+        except Exception as e:
+            logger.debug(f"모달창 감지 중 오류 (무시하고 계속): {e}")
+            return False
+    
     def _disconnect_all_market_apis(self):
         """
         모든 마켓의 API 연결을 끊습니다.
@@ -440,6 +495,9 @@ class ProductEditorCore6_1Dynamic:
             bool: 성공 여부
         """
         try:
+            # API 연결 끊기 전 모달창 감지 및 닫기
+            self._detect_and_close_modal()
+            
             # 모든 마켓들의 API 연결 끊기
             markets_to_disconnect = [
                 'smartstore', 'coupang', 'auction_gmarket', 
@@ -449,6 +507,10 @@ class ProductEditorCore6_1Dynamic:
             for market in markets_to_disconnect:
                 try:
                     logger.info(f"{market} API 연결 끊기 시도")
+                    
+                    # 스마트스토어, 쿠팡, 옥션/G마켓 API 연결 끊기 전 모달창 재확인
+                    if market in ['smartstore', 'coupang', 'auction_gmarket']:
+                        self._detect_and_close_modal()
                     
                     # 각 마켓별 개별 메서드 직접 호출 (처리 순서와 일치)
                     if market == 'smartstore':
@@ -1297,6 +1359,10 @@ class ProductEditorCore6_1Dynamic:
             if not self._update_smartstore_delivery_info():
                 logger.warning("스마트스토어 배송정보 변경에 실패했지만 계속 진행합니다")
             
+            # 7. 카페24 로그인해서 11번가 등록자료 가져오기
+            if not self._import_11st_products_from_cafe24():
+                logger.warning("카페24 11번가 상품 가져오기에 실패했지만 계속 진행합니다")
+            
             logger.info(f"상품 업로드 워크플로우 완료: {group_name}")
             return True
             
@@ -1565,6 +1631,117 @@ class ProductEditorCore6_1Dynamic:
                     logger.info("첫 번째 탭으로 복귀 완료")
             except:
                 logger.error("첫 번째 탭으로 복귀도 실패")
+            return False
+    
+    def _import_11st_products_from_cafe24(self):
+        """
+        카페24에 로그인하여 11번가 상품을 가져옵니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("카페24 11번가 상품 가져오기 시작")
+            
+            # 현재 행의 카페24 정보 가져오기
+            current_row = self.current_market_config
+            cafe24_id = current_row.get('cafe24_id', '')
+            cafe24_password = current_row.get('cafe24_password', '')
+            store_id_11st = current_row.get('11store_id', '')
+            
+            # 필수 정보 확인
+            if not cafe24_id or not cafe24_password or not store_id_11st:
+                logger.warning(f"카페24 정보 부족 - ID: {cafe24_id}, 11번가 스토어 ID: {store_id_11st}")
+                return False
+            
+            logger.info(f"카페24 정보 - ID: {cafe24_id}, 11번가 스토어 ID: {store_id_11st}")
+            
+            # MarketManagerCafe24 인스턴스 생성
+            cafe24_manager = MarketManagerCafe24(self.driver)
+            
+            # 카페24 로그인 및 11번가 상품 가져오기 실행
+            result = cafe24_manager.login_and_import_11st_products(
+                cafe24_id=cafe24_id,
+                cafe24_password=cafe24_password,
+                store_id_11st=store_id_11st
+            )
+            
+            if result:
+                logger.info("카페24 11번가 상품 가져오기 성공")
+            else:
+                logger.error("카페24 11번가 상품 가져오기 실패")
+            
+            # 카페24 탭 정리 및 퍼센티 메인 탭으로 복귀
+            self._cleanup_cafe24_tabs_and_return_to_main()
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"카페24 11번가 상품 가져오기 중 오류 발생: {e}")
+            # 오류 발생 시에도 탭 정리 시도
+            try:
+                self._cleanup_cafe24_tabs_and_return_to_main()
+            except:
+                pass
+            return False
+    
+    def _cleanup_cafe24_tabs_and_return_to_main(self):
+        """
+        카페24 관련 탭들을 정리하고 퍼센티 메인 탭으로 복귀합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("카페24 탭 정리 및 퍼센티 메인 탭으로 복귀 시작")
+            
+            # 현재 열린 모든 탭 확인
+            all_windows = self.driver.window_handles
+            logger.info(f"현재 열린 탭 수: {len(all_windows)}")
+            
+            # 퍼센티 메인 탭 찾기 (첫 번째 탭이 보통 메인 탭)
+            main_tab = all_windows[0] if all_windows else None
+            
+            if len(all_windows) > 1:
+                # 카페24 탭들 닫기 (메인 탭 제외)
+                for i in range(len(all_windows) - 1, 0, -1):  # 뒤에서부터 닫기
+                    try:
+                        self.driver.switch_to.window(all_windows[i])
+                        current_url = self.driver.current_url
+                        
+                        # 카페24 관련 탭인지 확인
+                        if 'cafe24' in current_url.lower() or 'eclogin' in current_url.lower():
+                            logger.info(f"카페24 탭 닫기: {current_url}")
+                            self.driver.close()
+                        else:
+                            logger.info(f"카페24가 아닌 탭 유지: {current_url}")
+                    except Exception as e:
+                        logger.warning(f"탭 {i} 닫기 실패: {e}")
+                        continue
+            
+            # 메인 탭으로 복귀
+            if main_tab:
+                self.driver.switch_to.window(main_tab)
+                logger.info("퍼센티 메인 탭으로 복귀 완료")
+                
+                # 메인 탭이 퍼센티인지 확인
+                try:
+                    current_url = self.driver.current_url
+                    if 'percenty' in current_url.lower():
+                        logger.info(f"퍼센티 메인 탭 확인: {current_url}")
+                    else:
+                        logger.warning(f"메인 탭이 퍼센티가 아님: {current_url}")
+                except:
+                    pass
+            
+            # 탭 정리 후 최종 탭 수 확인
+            final_windows = self.driver.window_handles
+            logger.info(f"탭 정리 완료 - 최종 탭 수: {len(final_windows)}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"카페24 탭 정리 및 메인 탭 복귀 실패: {e}")
             return False
 
 # 사용 예시

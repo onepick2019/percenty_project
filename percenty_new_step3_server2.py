@@ -21,6 +21,9 @@ from account_manager import AccountManager
 # Step 3 코어 기능 임포트
 from product_editor_core3 import ProductEditorCore3
 
+# 이미지 번역 관리자 임포트
+from image_translation_manager import ImageTranslationManager
+
 # 최적화된 공통 드롭다운 유틸리티 임포트
 from dropdown_utils_common import CommonDropdownUtils
 

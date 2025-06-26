@@ -1,14 +1,14 @@
 {
   "periodic_config": {
-    "step1_quantity": 500,
+    "step1_quantity": 2,
     "other_quantity": 100,
     "selected_steps": [
-      "33"
+      "31"
     ],
     "selected_accounts": [
-      "onepick2019@gmail.com"
+      "wop31garam@gmail.com"
     ],
-    "schedule_time": "00:58",
+    "schedule_time": "16:51",
     "step_interval": 10,
     "chunk_sizes": {
       "1": 20,

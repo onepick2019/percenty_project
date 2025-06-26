@@ -76,6 +76,32 @@ class UnifiedDropdownManager:
         현재 화면의 모든 옵션 로깅
         """
         self.common_utils.log_all_available_options()
+    
+    def select_product_group_by_name(self, group_name, item_index=0):
+        """
+        상품 그룹을 이름으로 선택
+        
+        Args:
+            group_name (str): 선택할 그룹 이름
+            item_index (int): 상품 인덱스 (기본값: 0)
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info(f"상품 그룹 '{group_name}' 선택 시도 (아이템 인덱스: {item_index})")
+            
+            # 상품 아이템 드롭박스 열기
+            if not self.common_utils.open_product_item_dropdown(item_index):
+                logger.error("상품 아이템 드롭박스 열기 실패")
+                return False
+            
+            # 그룹 선택
+            return self.select_group_with_verification(group_name)
+                
+        except Exception as e:
+            logger.error(f"상품 그룹 선택 중 오류: {e}")
+            return False
 
 # 싱글톤 인스턴스 관리
 _unified_dropdown_manager = None

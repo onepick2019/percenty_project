@@ -455,6 +455,108 @@ class CommonDropdownUtils:
             logger.error(f"페이지당 항목 수 설정 중 오류: {e}")
             return False
     
+    def open_product_item_dropdown(self, item_index=0, timeout=2):
+        """
+        개별 상품 아이템의 그룹 드롭박스 열기
+        (비그룹 상품보기에서 선택한 상품의 드롭박스)
+        
+        Args:
+            item_index: 여러 상품이 있을 경우 상품 인덱스 (기본값: 0, 첫 번째 상품)
+            timeout: 최대 대기 시간(초)
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info(f"상품 아이템({item_index})의 그룹 드롭박스 열기")
+            
+            # 개별 상품의 드롭박스 선택자 - 더 정확한 선택자 사용
+            selectors = [
+                # '그룹 없음' 텍스트가 포함된 드롭박스 선택
+                "//div[contains(@class, 'ant-select-single')][.//span[contains(text(), '그룹 없음')]]",
+                
+                # sc-dkmUuB 클래스가 포함된 드롭박스 선택 (상품 그룹 드롭박스에만 있는 클래스)
+                "//div[contains(@class, 'ant-select-single')][.//span[contains(@class, 'sc-dkmUuB')]]",
+                
+                # 순서 기반 배열 선택자 (대체 수단으로만 사용)
+                f"(//div[contains(@class, 'ant-select-single') and not(contains(@class, 'ant-select-borderless'))])[position()={item_index + 1}]",
+                
+                # 그룹상품관리 화면 (대체 선택자)
+                f"(//div[contains(@class, 'sc-gwZKzw')]//div[contains(@class, 'ant-select-single')])[position()={item_index + 1}]"
+            ]
+            
+            # JavaScript로 서술적 접근 시도 (선택자가 실패할 경우를 대비)
+            js_script = """
+            try {
+                // 그룹 드롭박스 찾기 (그룹 없음 텍스트 포함 또는 sc-dkmUuB 클래스 포함)
+                const groupDropdowns = Array.from(document.querySelectorAll('div.ant-select-single')).filter(el => {
+                    return el.textContent.includes('그룹 없음') || 
+                           el.querySelector('.sc-dkmUuB') !== null;
+                });
+                
+                if (groupDropdowns.length > 0) {
+                    const found = groupDropdowns[0];
+                    found.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                return false;
+            }
+            """
+            
+            # 먼저 JavaScript로 요소를 화면 중앙에 보이게 하기
+            self.driver.execute_script(js_script)
+            time.sleep(DELAY_VERY_SHORT)  # 스크롤링 대기
+            
+            dropdown_element = None
+            for selector in selectors:
+                try:
+                    dropdown_element = WebDriverWait(self.driver, timeout).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    break
+                except (TimeoutException, NoSuchElementException):
+                    continue
+                    
+            if not dropdown_element:
+                # XPath 선택자가 실패하면 JavaScript로 직접 요소 클릭
+                js_click_script = """
+                try {
+                    const groupDropdowns = Array.from(document.querySelectorAll('div.ant-select-single')).filter(el => {
+                        return el.textContent.includes('그룹 없음') || 
+                               el.querySelector('.sc-dkmUuB') !== null;
+                    });
+                    
+                    if (groupDropdowns.length > 0) {
+                        groupDropdowns[0].click();
+                        return true;
+                    }
+                    return false;
+                } catch (e) {
+                    return false;
+                }
+                """
+                
+                clicked = self.driver.execute_script(js_click_script)
+                if clicked:
+                    logger.info("JavaScript를 사용해 그룹 드롭박스 클릭 성공")
+                    time.sleep(DELAY_SHORT)
+                    return True
+                else:
+                    logger.error("상품 아이템의 그룹 드롭박스를 찾을 수 없습니다.")
+                    return False
+                
+            # 드롭박스 클릭
+            dropdown_element.click()
+            time.sleep(DELAY_SHORT)
+            logger.info("드롭박스가 열렸습니다.")
+            return True
+            
+        except Exception as e:
+            logger.error(f"드롭박스 열기 오류: {e}")
+            return False
+    
     def click_element_with_multiple_methods(self, element):
         """
         요소를 여러 방법으로 클릭 시도 (4단계 방식)
