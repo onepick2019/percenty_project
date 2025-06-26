@@ -199,8 +199,16 @@ class ImageTranslationHandler:
             elif pos.startswith('last:'):
                 try:
                     num = int(pos.split(':')[1])
-                    positions.append(num)
-                    logger.info(f"last 형식 파싱: {pos} -> {num}")
+                    # 전체 이미지 개수를 확인하여 마지막 N개 이미지의 위치 계산
+                    total_images = self._get_total_image_count()
+                    if total_images > 0:
+                        # last:1이면 마지막 1개, last:2면 마지막 2개
+                        start_pos = max(1, total_images - num + 1)
+                        for i in range(start_pos, total_images + 1):
+                            positions.append(i)
+                        logger.info(f"last 형식 파싱: {pos} -> {list(range(start_pos, total_images + 1))} (총 {total_images}개 이미지 중)")
+                    else:
+                        logger.warning(f"이미지 개수를 확인할 수 없어 last 명령어 처리 불가: {pos}")
                 except (IndexError, ValueError):
                     logger.warning(f"잘못된 last 형식: {pos}")
             # "specific:숫자" 형식인 경우 (특정 위치 지정)
@@ -234,7 +242,7 @@ class ImageTranslationHandler:
     
     def _process_image_translate_action(self, action_info):
         """
-        이미지 번역 액션 처리
+        이미지 번역 액션 처리 - 통합 번역 방식 사용
         
         Args:
             action_info (dict): 액션 정보
@@ -258,95 +266,389 @@ class ImageTranslationHandler:
                     logger.info("중문글자가 있는 이미지를 찾지 못했습니다")
                     positions = [pos for pos in positions if pos != 'auto_detect_chinese']
             
-            success_count = 0
-            total_count = len(positions)
-            
-            for position in positions:
-                try:
-                    logger.info(f"이미지 위치 {position} 번역 시작")
-                    
-                    # 편집 버튼 클릭
-                    if not self._click_edit_button_by_position(position):
-                        logger.error(f"이미지 위치 {position} 편집 버튼 클릭 실패")
-                        continue
-                    
-                    # 이미지 번역 실행
-                    if not self._execute_image_translation():
-                        logger.error(f"이미지 위치 {position} 번역 실행 실패")
-                        continue
-                    
-                    # 번역 완료 대기
-                    if not self._wait_for_translation_complete():
-                        logger.error(f"이미지 위치 {position} 번역 완료 대기 실패")
-                        continue
-                    
-                    # 수정사항 저장
-                    if not self._save_translation_changes():
-                        logger.error(f"이미지 위치 {position} 수정사항 저장 실패")
-                        continue
-                    
-                    success_count += 1
-                    logger.info(f"이미지 위치 {position} 번역 성공")
-                    
-                except Exception as e:
-                    logger.error(f"이미지 위치 {position} 번역 오류: {e}")
-                    continue
-            
-            logger.info(f"이미지 번역 처리 완료 - 성공: {success_count}/{total_count}")
-            return success_count > 0
+            # 통합 번역 방식 사용 (한 번의 모달창에서 모든 번역 처리)
+            return self._process_unified_image_translation(positions)
             
         except Exception as e:
             logger.error(f"이미지 번역 액션 처리 오류: {e}")
             return False
     
-    def _click_edit_button_by_position(self, position):
+    def _process_unified_image_translation(self, positions):
         """
-        위치별 편집 버튼 클릭
+        통합 이미지 번역 처리 - NewImageTranslationHandler와 동일한 방식 사용
+        한 번의 모달창에서 모든 번역을 순차적으로 처리
         
         Args:
-            position (int): 이미지 위치
+            positions (list): 번역할 이미지 위치 목록 (현재는 사용하지 않고 모든 이미지 처리)
             
         Returns:
             bool: 성공 여부
         """
         try:
-            # 편집 버튼 선택자들 (위치별) - 문서에서 확인한 정확한 DOM 구조 사용
+            logger.info("통합 이미지 번역 처리 시작 - NewImageTranslationHandler 방식 사용")
+            
+            # 총 이미지 개수 확인
+            total_images = self._get_total_image_count()
+            if total_images == 0:
+                logger.warning("이미지가 없습니다")
+                return False
+                
+            logger.info(f"총 {total_images}개의 이미지 통합 번역 처리 시작")
+            
+            # 첫 번째 편집 버튼 클릭
+            if not self._click_first_edit_button():
+                return False
+                
+            # 이미지 번역 모달 대기
+            if not self._wait_for_image_translation_modal():
+                return False
+                
+            # 모든 이미지 순차 번역 처리
+            processed_count = self._process_all_images_in_modal(total_images)
+            
+            # 변경사항 저장 (한 번만)
+            if processed_count > 0:
+                self._save_changes()
+            
+            # 모달 닫기
+            self._close_image_translation_modal()
+            
+            logger.info(f"통합 번역 처리 완료: {processed_count}/{total_images}개 처리됨")
+            return processed_count > 0
+            
+        except Exception as e:
+            logger.error(f"통합 이미지 번역 처리 오류: {e}")
+            return False
+    
+    def _click_first_edit_button(self):
+        """첫 번째 이미지의 편집 버튼 클릭"""
+        try:
+            logger.info("첫 번째 이미지 편집 버튼 클릭 시도")
+            
+            # 편집 버튼 선택자들
             edit_button_selectors = [
-                f"(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[{position}]",
-                f"(//div[contains(@class, 'sc-kTbCBX') or contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[{position}]",
-                f"(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[{position}]",
-                f"(//span[text()='편집하기'])[{position}]"
+                "//button[contains(@class, 'ant-btn') and contains(text(), '편집')]",
+                "//button[.//span[text()='편집']]",
+                "//button[contains(@class, 'ant-btn')][.//span[contains(text(), '편집')]]"
             ]
             
             for selector in edit_button_selectors:
                 try:
-                    edit_btn = self.driver.find_element(By.XPATH, selector)
-                    if edit_btn.is_displayed():
-                        # 스크롤하여 요소가 보이도록 함
-                        self.driver.execute_script("arguments[0].scrollIntoView(true);", edit_btn)
-                        time.sleep(0.1)
-                        
-                        # 클릭 (부모 요소 클릭 시도)
-                        try:
-                            edit_btn.click()
-                            logger.info(f"이미지 위치 {position} 편집 버튼 클릭 성공 (일반 클릭)")
-                        except Exception:
-                            # JavaScript 클릭 시도
-                            self.driver.execute_script("arguments[0].click();", edit_btn)
-                            logger.info(f"이미지 위치 {position} 편집 버튼 클릭 성공 (JavaScript 클릭)")
-                        
-                        self.human_delay.short_delay()  # 모달 로딩 대기
-                        return True
+                    edit_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    edit_button.click()
+                    logger.info("첫 번째 편집 버튼 클릭 성공")
+                    self.human_delay.short_delay()
+                    return True
                 except Exception as e:
-                    logger.debug(f"편집 버튼 선택자 {selector} 실패: {e}")
+                    logger.debug(f"편집 버튼 선택자 실패: {selector} - {e}")
                     continue
             
-            logger.error(f"이미지 위치 {position} 편집 버튼을 찾을 수 없음")
+            logger.error("첫 번째 편집 버튼을 찾을 수 없음")
             return False
             
         except Exception as e:
-            logger.error(f"이미지 위치 {position} 편집 버튼 클릭 오류: {e}")
+            logger.error(f"첫 번째 편집 버튼 클릭 오류: {e}")
             return False
+    
+    def _wait_for_image_translation_modal(self):
+        """이미지 번역 모달 대기"""
+        try:
+            logger.info("이미지 번역 모달 대기")
+            
+            # 이미지 번역 모달 선택자들
+            modal_selectors = [
+                "//div[contains(@class, 'ant-modal')]//span[contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-drawer')]//span[contains(text(), '이미지 번역')]",
+                "//div[contains(@class, 'ant-modal-content')]",
+                "//div[contains(@class, 'ant-drawer-content')]"
+            ]
+            
+            for selector in modal_selectors:
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        EC.visibility_of_element_located((By.XPATH, selector))
+                    )
+                    logger.info(f"이미지 번역 모달 발견: {selector}")
+                    self.human_delay.medium_delay()
+                    return True
+                except Exception as e:
+                    logger.debug(f"모달 선택자 실패: {selector} - {e}")
+                    continue
+            
+            logger.error("이미지 번역 모달을 찾을 수 없음")
+            return False
+            
+        except Exception as e:
+            logger.error(f"이미지 번역 모달 대기 오류: {e}")
+            return False
+    
+    def _process_all_images_in_modal(self, total_images):
+        """모달 내 모든 이미지 순차 번역 처리"""
+        try:
+            logger.info(f"모달 내 {total_images}개 이미지 순차 번역 시작")
+            
+            processed_count = 0
+            
+            # 모든 이미지를 순차적으로 처리
+            for i in range(total_images):
+                try:
+                    logger.info(f"이미지 {i+1}/{total_images} 번역 처리 중")
+                    
+                    # 이미지 번역 실행
+                    if self._execute_single_image_translation(i+1):
+                        processed_count += 1
+                        logger.info(f"이미지 {i+1} 번역 성공")
+                    else:
+                        logger.warning(f"이미지 {i+1} 번역 실패")
+                    
+                    # 다음 이미지로 이동 (마지막 이미지가 아닌 경우)
+                    if i < total_images - 1:
+                        self._move_to_next_image()
+                        
+                except Exception as e:
+                    logger.error(f"이미지 {i+1} 처리 오류: {e}")
+                    continue
+            
+            logger.info(f"모달 내 이미지 처리 완료: {processed_count}/{total_images}")
+            return processed_count
+            
+        except Exception as e:
+            logger.error(f"모달 내 이미지 처리 오류: {e}")
+            return 0
+    
+    def _execute_single_image_translation(self, image_index):
+        """단일 이미지 번역 실행"""
+        try:
+            logger.info(f"이미지 {image_index} 번역 실행")
+            
+            # 번역 버튼 클릭
+            translate_button_selectors = [
+                "//button[contains(text(), '번역')]",
+                "//button[.//span[contains(text(), '번역')]]",
+                "//button[contains(@class, 'ant-btn') and contains(text(), '번역')]"
+            ]
+            
+            for selector in translate_button_selectors:
+                try:
+                    translate_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    translate_button.click()
+                    logger.info(f"이미지 {image_index} 번역 버튼 클릭 성공")
+                    
+                    # 번역 완료 대기
+                    self._wait_for_translation_completion()
+                    return True
+                    
+                except Exception as e:
+                    logger.debug(f"번역 버튼 선택자 실패: {selector} - {e}")
+                    continue
+            
+            logger.error(f"이미지 {image_index} 번역 버튼을 찾을 수 없음")
+            return False
+            
+        except Exception as e:
+            logger.error(f"이미지 {image_index} 번역 실행 오류: {e}")
+            return False
+    
+    def _move_to_next_image(self):
+        """다음 이미지로 이동"""
+        try:
+            # 다음 버튼 또는 화살표 클릭
+            next_button_selectors = [
+                "//button[contains(@class, 'ant-btn') and contains(@aria-label, 'right')]",
+                "//button[.//span[contains(@class, 'anticon-right')]]",
+                "//button[contains(text(), '다음')]"
+            ]
+            
+            for selector in next_button_selectors:
+                try:
+                    next_button = self.driver.find_element(By.XPATH, selector)
+                    if next_button.is_enabled():
+                        next_button.click()
+                        logger.info("다음 이미지로 이동 성공")
+                        self.human_delay.short_delay()
+                        return True
+                except Exception as e:
+                    logger.debug(f"다음 버튼 선택자 실패: {selector} - {e}")
+                    continue
+            
+            logger.warning("다음 이미지 버튼을 찾을 수 없음")
+            return False
+            
+        except Exception as e:
+            logger.error(f"다음 이미지 이동 오류: {e}")
+            return False
+    
+    def _save_changes(self):
+        """변경사항 저장"""
+        try:
+            logger.info("변경사항 저장 시도")
+            
+            # 저장 버튼 선택자들
+            save_button_selectors = [
+                "//button[contains(text(), '저장')]",
+                "//button[.//span[contains(text(), '저장')]]",
+                "//button[contains(@class, 'ant-btn-primary') and contains(text(), '저장')]"
+            ]
+            
+            for selector in save_button_selectors:
+                try:
+                    save_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    save_button.click()
+                    logger.info("변경사항 저장 성공")
+                    self.human_delay.medium_delay()
+                    return True
+                except Exception as e:
+                    logger.debug(f"저장 버튼 선택자 실패: {selector} - {e}")
+                    continue
+            
+            logger.error("저장 버튼을 찾을 수 없음")
+            return False
+            
+        except Exception as e:
+            logger.error(f"변경사항 저장 오류: {e}")
+            return False
+    
+    def _close_image_translation_modal(self):
+        """이미지 번역 모달 닫기"""
+        try:
+            logger.info("이미지 번역 모달 닫기 시도")
+            
+            # 닫기 버튼 선택자들
+            close_button_selectors = [
+                "//button[contains(@class, 'ant-modal-close')]",
+                "//button[contains(@class, 'ant-drawer-close')]",
+                "//button[.//span[contains(@class, 'anticon-close')]]",
+                "//button[contains(text(), '닫기')]",
+                "//button[contains(text(), '취소')]"
+            ]
+            
+            for selector in close_button_selectors:
+                try:
+                    close_button = self.driver.find_element(By.XPATH, selector)
+                    close_button.click()
+                    logger.info("이미지 번역 모달 닫기 성공")
+                    self.human_delay.short_delay()
+                    return True
+                except Exception as e:
+                    logger.debug(f"닫기 버튼 선택자 실패: {selector} - {e}")
+                    continue
+            
+            # ESC 키로 모달 닫기 시도
+            try:
+                self.driver.find_element(By.TAG_NAME, 'body').send_keys(Keys.ESCAPE)
+                logger.info("ESC 키로 모달 닫기 시도")
+                self.human_delay.short_delay()
+                return True
+            except Exception as e:
+                logger.debug(f"ESC 키 모달 닫기 실패: {e}")
+            
+            logger.error("이미지 번역 모달을 닫을 수 없음")
+            return False
+            
+        except Exception as e:
+            logger.error(f"이미지 번역 모달 닫기 오류: {e}")
+            return False
+    
+    def _close_edit_modal_if_open(self):
+        """
+        편집 모달이 열려있다면 닫기 시도
+        오류 발생 시 편집 모달을 안전하게 닫기 위한 메서드
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # 편집 모달의 닫기 버튼들 시도
+            close_button_selectors = [
+                "//button[contains(@class, 'ant-modal-close')]//span[contains(@class, 'ant-modal-close-x')]",
+                "//button[contains(@class, 'ant-drawer-close')]//span[contains(@class, 'ant-drawer-close-x')]",
+                "//span[contains(@class, 'ant-modal-close-x')]",
+                "//span[contains(@class, 'ant-drawer-close-x')]",
+                "//button[contains(@aria-label, 'Close')]",
+                "//button[@aria-label='Close']"
+            ]
+            
+            for selector in close_button_selectors:
+                try:
+                    close_btn = self.driver.find_element(By.XPATH, selector)
+                    if close_btn.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", close_btn)
+                        logger.info("편집 모달 닫기 성공")
+                        self.human_delay.custom_delay(0.3, 0.7)
+                        return True
+                except:
+                    continue
+            
+            # ESC 키로 모달 닫기 시도
+            try:
+                self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                logger.info("ESC 키로 편집 모달 닫기 시도")
+                self.human_delay.custom_delay(0.3, 0.7)
+                return True
+            except:
+                pass
+            
+            logger.debug("편집 모달 닫기 버튼을 찾을 수 없음")
+            return False
+            
+        except Exception as e:
+            logger.debug(f"편집 모달 닫기 오류: {e}")
+            return False
+    
+    # def _click_edit_button_by_position(self, position):
+    #     """
+    #     위치별 편집 버튼 클릭 - 통합 방식으로 대체됨
+    #     
+    #     Args:
+    #         position (int): 이미지 위치
+    #         
+    #     Returns:
+    #         bool: 성공 여부
+    #     """
+    #     try:
+    #         # 편집 버튼 선택자들 (위치별) - 문서에서 확인한 정확한 DOM 구조 사용
+    #         edit_button_selectors = [
+    #             f"(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[{position}]",
+    #             f"(//div[contains(@class, 'sc-kTbCBX') or contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[{position}]",
+    #             f"(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[{position}]",
+    #             f"(//span[text()='편집하기'])[{position}]"
+    #         ]
+    #         
+    #         for selector in edit_button_selectors:
+    #             try:
+    #                 edit_btn = self.driver.find_element(By.XPATH, selector)
+    #                 if edit_btn.is_displayed():
+    #                     # 스크롤하여 요소가 보이도록 함
+    #                     self.driver.execute_script("arguments[0].scrollIntoView(true);", edit_btn)
+    #                     time.sleep(0.1)
+    #                     
+    #                     # 클릭 (부모 요소 클릭 시도)
+    #                     try:
+    #                         edit_btn.click()
+    #                         logger.info(f"이미지 위치 {position} 편집 버튼 클릭 성공 (일반 클릭)")
+    #                     except Exception:
+    #                         # JavaScript 클릭 시도
+    #                         self.driver.execute_script("arguments[0].click();", edit_btn)
+    #                         logger.info(f"이미지 위치 {position} 편집 버튼 클릭 성공 (JavaScript 클릭)")
+    #                     
+    #                     self.human_delay.short_delay()  # 모달 로딩 대기
+    #                     return True
+    #             except Exception as e:
+    #                 logger.debug(f"편집 버튼 선택자 {selector} 실패: {e}")
+    #                 continue
+    #         
+    #         logger.error(f"이미지 위치 {position} 편집 버튼을 찾을 수 없음")
+    #         return False
+    #         
+    #     except Exception as e:
+    #         logger.error(f"이미지 위치 {position} 편집 버튼 클릭 오류: {e}")
+    #         return False
     
     def _execute_image_translation(self):
         """
@@ -744,6 +1046,59 @@ class ImageTranslationHandler:
         except Exception as e:
             logger.error(f"중문글자 이미지 감지 오류: {e}")
             return []
+    
+    def _get_total_image_count(self):
+        """
+        모달창 내 전체 이미지 개수 확인
+        
+        Returns:
+            int: 전체 이미지 개수
+        """
+        try:
+            logger.debug("전체 이미지 개수 확인 시작")
+            
+            # 이미지 선택자들 (중문글자 감지와 동일한 로직 사용)
+            image_selectors = [
+                "//div[contains(@class, 'ant-modal-content') or contains(@class, 'ant-drawer-content')]//div[contains(@class, 'sc-hCrRFl') and contains(@class, 'dVjKzV')]//img[contains(@class, 'sc-kyDlHK')]",
+                "//div[contains(@class, 'ant-modal-content') or contains(@class, 'ant-drawer-content')]//img[contains(@class, 'sc-kyDlHK') and contains(@class, 'bLXrEr')]",
+                "//div[contains(@class, 'ant-modal-content') or contains(@class, 'ant-drawer-content')]//img[contains(@src, 'alicdn.com')]",
+                "//div[contains(@class, 'ant-modal-content') or contains(@class, 'ant-drawer-content')]//img[@draggable='false' and contains(@class, 'sc-kyDlHK')]"
+            ]
+            
+            all_images = []
+            seen_images = set()
+            seen_elements = set()
+            
+            for i, selector in enumerate(image_selectors):
+                try:
+                    images = self.driver.find_elements(By.XPATH, selector)
+                    
+                    for img in images:
+                        try:
+                            if img.is_displayed():
+                                element_id = id(img)
+                                if element_id in seen_elements:
+                                    continue
+                                    
+                                src = img.get_attribute('src')
+                                if src and src not in seen_images:
+                                    if 'percenty.co.kr' in src:
+                                        continue
+                                    seen_images.add(src)
+                                    seen_elements.add(element_id)
+                                    all_images.append(img)
+                        except Exception as e:
+                            continue
+                except Exception as e:
+                    continue
+            
+            total_count = len(all_images)
+            logger.debug(f"전체 이미지 개수: {total_count}개")
+            return total_count
+            
+        except Exception as e:
+            logger.error(f"전체 이미지 개수 확인 오류: {e}")
+            return 0
     
     def _check_image_for_chinese_text(self, img_element, position):
         """

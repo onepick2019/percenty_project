@@ -206,8 +206,13 @@ class PercentyImageManager3:
             
             # 총 이미지 개수 텍스트 찾기 (사용자가 제공한 정확한 선택자 사용)
             count_selectors = [
+                # 새로운 DOM 구조 (2025-06-25)
+                "//span[contains(@class, 'sc-bRimrq') and contains(@class, 'kCtFmP') and contains(@class, 'Body2Medium14') and contains(@class, 'CharacterTitle85') and contains(text(), '총') and contains(text(), '개의 이미지')]",
+                "//span[contains(@class, 'sc-bRimrq') and contains(@class, 'kCtFmP') and contains(text(), '총') and contains(text(), '개의 이미지')]",
+                # 기존 DOM 구조 (백업용)
                 "//span[contains(@class, 'sc-dLmyTH') and contains(@class, 'jOUQKU') and contains(@class, 'Body2Medium14') and contains(@class, 'CharacterTitle85') and contains(text(), '총') and contains(text(), '개의 이미지')]",
                 "//span[contains(@class, 'sc-dLmyTH') and contains(@class, 'jOUQKU') and contains(text(), '총') and contains(text(), '개의 이미지')]",
+                # 범용 선택자 (클래스 무관)
                 "//span[contains(text(), '총') and contains(text(), '개의 이미지')]",
                 "//div[contains(text(), '총') and contains(text(), '개의 이미지')]"
             ]
@@ -302,8 +307,9 @@ class PercentyImageManager3:
             
             # 이미지 컨테이너 찾기 (사용자가 제공한 DOM 구조 기반)
             container_selectors = [
-                f"(//div[contains(@class, 'ant-col') and contains(@class, 'css-1li46mu')]//div[contains(@class, 'sc-hCrRFl') and contains(@class, 'dVjKzV')])[{position}]",
-                f"(//div[contains(@class, 'sc-hCrRFl') and contains(@class, 'dVjKzV')])[{position}]",
+                f"(//div[contains(@class, 'ant-col') and contains(@class, 'css-1li46mu')]//div[contains(@class, 'sc-fInFcU')])[{position}]",
+                f"(//div[contains(@class, 'sc-fInFcU') and contains(@class, 'esMzXV')])[{position}]",
+                f"(//div[contains(@class, 'ant-col') and contains(@class, 'css-1li46mu')]//div[contains(@class, 'sc-bdlOLf') and contains(@class, 'jdyrUI')])[{position}]",
                 f"(//div[contains(@class, 'ant-col') and contains(@class, 'css-1li46mu')])[{position}]"
             ]
             
@@ -324,12 +330,15 @@ class PercentyImageManager3:
                 logger.error(f"위치 {position}의 이미지 컨테이너를 찾을 수 없습니다.")
                 return False
                 
-            # 삭제 버튼 찾기 (사용자가 제공한 DOM 구조 기반)
+            # 삭제 버튼 찾기 (가장 간단한 방법부터 시도)
             delete_selectors = [
-                ".//div[contains(@class, 'sc-bOTbmH') and contains(@class, 'iNrMOB')]//span[contains(text(), '삭제')]",
-                ".//div[contains(@class, 'sc-bOTbmH')]//span[contains(text(), '삭제')]",
+                ".//span[text()='삭제']",
                 ".//span[contains(text(), '삭제')]",
-                ".//div[contains(@class, 'sc-bOTbmH') and contains(@class, 'iNrMOB')]"
+                ".//div[contains(@class, 'sc-bdlOLf')]//span[text()='삭제']",
+                ".//span[contains(@class, 'FootnoteDescription') and text()='삭제']",
+                ".//div[contains(@class, 'sc-bdlOLf') and contains(@class, 'jdyrUI')]//span[contains(@class, 'sc-bRimrq') and contains(@class, 'kCtFmP') and contains(@class, 'FootnoteDescription') and text()='삭제']",
+                ".//*[text()='삭제']",
+                ".//*[contains(text(), '삭제')]"
             ]
             
             delete_button = None
@@ -348,24 +357,43 @@ class PercentyImageManager3:
                     continue
                     
             if not delete_button:
-                logger.error(f"위치 {position}의 삭제 버튼을 찾을 수 없습니다.")
+                # 디버깅을 위해 컨테이너의 HTML 구조 출력
+                try:
+                    container_html = image_container.get_attribute('outerHTML')
+                    logger.error(f"위치 {position}의 삭제 버튼을 찾을 수 없습니다.")
+                    logger.debug(f"컨테이너 HTML 구조: {container_html[:500]}...")  # 처음 500자만 출력
+                except Exception as e:
+                    logger.error(f"위치 {position}의 삭제 버튼을 찾을 수 없습니다. HTML 구조 확인 실패: {e}")
                 return False
                 
-            # 삭제 버튼 클릭
-            try:
-                # 스크롤하여 요소가 보이도록 함
-                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", delete_button)
-                time.sleep(DELAY_SHORT)
-                
-                # 클릭 시도
-                delete_button.click()
-                logger.info(f"위치 {position}의 이미지 삭제 버튼 클릭 성공")
-                
-            except ElementClickInterceptedException:
-                # JavaScript 클릭 시도
-                logger.warning(f"일반 클릭 실패, JavaScript 클릭 시도")
-                self.driver.execute_script("arguments[0].click();", delete_button)
-                logger.info(f"위치 {position}의 이미지 JavaScript 클릭 성공")
+            # 삭제 버튼 클릭 (여러 방법 시도)
+            click_success = False
+            
+            # 스크롤하여 요소가 보이도록 함
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", delete_button)
+            time.sleep(DELAY_SHORT)
+            
+            # 클릭 방법들을 순차적으로 시도
+            click_methods = [
+                ("일반 클릭", lambda: delete_button.click()),
+                ("JavaScript 클릭", lambda: self.driver.execute_script("arguments[0].click();", delete_button)),
+                ("ActionChains 클릭", lambda: ActionChains(self.driver).move_to_element(delete_button).click().perform())
+            ]
+            
+            for method_name, click_method in click_methods:
+                try:
+                    logger.info(f"위치 {position}의 삭제 버튼 {method_name} 시도")
+                    click_method()
+                    logger.info(f"위치 {position}의 이미지 삭제 버튼 {method_name} 성공")
+                    click_success = True
+                    break
+                except Exception as e:
+                    logger.warning(f"{method_name} 실패: {e}")
+                    continue
+                    
+            if not click_success:
+                logger.error(f"위치 {position}의 삭제 버튼 클릭 실패 (모든 방법 시도함)")
+                return False
                 
             # 삭제 후 대기
             time.sleep(DELAY_MEDIUM)
@@ -850,11 +878,17 @@ class PercentyImageManager3:
             
             # 삭제 버튼 선택자들 (실제 HTML 구조에 맞게 수정)
             delete_selectors = [
-                f"(//div[contains(@class, 'sc-leQnM') and .//span[contains(@class, 'FootnoteDescription') and text()='삭제']])[{position}]",
-                f"(//div[contains(@class, 'sc-leQnM')]//span[contains(@class, 'FootnoteDescription') and text()='삭제'])[{position}]",
+                # 속성 기반 선택자 (실제 썸네일 삭제 버튼 - 최우선)
                 f"(//span[contains(@class, 'FootnoteDescription') and text()='삭제'])[{position}]",
+                
+                # 텍스트 기반 선택자 (다른 삭제 버튼과 혼동 위험)
                 f"(//span[text()='삭제'])[{position}]",
+                f"(//span[contains(text(), '삭제')])[{position}]",
                 f"(//button[contains(., '삭제')])[{position}]",
+                
+                # 클래스 기반 선택자 (DOM 변경에 취약하지만 필요시 사용)
+                f"(//div[contains(@class, 'sc-heIBml') and contains(@class, 'bxPVbE')]//span[contains(@class, 'sc-doohEh') and contains(@class, 'imNntt') and contains(@class, 'FootnoteDescription') and text()='삭제'])[{position}]",
+                f"(//div[contains(@class, 'sc-leQnM')]//span[contains(@class, 'FootnoteDescription') and text()='삭제'])[{position}]",
                 f"(//div[contains(@class, 'ant-upload-list-item')][{position}]//span[text()='삭제'])"
             ]
             

@@ -1634,16 +1634,8 @@ class ProductEditorCore3:
                 actions = action_info.get('actions', [])
                 logger.info(f"복합 이미지 번역 시작: {len(actions)}개 액션")
                 
-                all_success = True
-                for i, sub_action in enumerate(actions):
-                    logger.info(f"복합 액션 {i+1}/{len(actions)} 실행: {sub_action}")
-                    # 각 액션을 개별적으로 실행
-                    sub_success = self._execute_single_translate_action(sub_action)
-                    if not sub_success:
-                        logger.warning(f"복합 액션 {i+1} 실패: {sub_action}")
-                        all_success = False
-                
-                success = all_success
+                # 복합 액션은 통합 처리 방식 사용 (모달창 한 번만 열기)
+                success = self._execute_combined_translate_actions(actions)
             else:
                 # 단일 명령어 처리
                 success = self.image_translate(k_data)
@@ -1659,9 +1651,64 @@ class ProductEditorCore3:
             logger.error(f"K열 데이터 처리 중 오류: {e}")
             return False
     
+    def _execute_combined_translate_actions(self, actions):
+        """
+        복합 이미지 번역 액션들을 통합 처리 (모달창 한 번만 열기)
+        
+        Args:
+            actions: 파싱된 액션 정보 리스트
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # 모든 액션의 위치들을 하나로 통합
+            combined_positions = []
+            
+            for i, action_info in enumerate(actions):
+                logger.info(f"복합 액션 {i+1}/{len(actions)} 실행: {action_info}")
+                action = action_info.get('action')
+                
+                if action == 'first':
+                    count = action_info.get('count', 1)
+                    # first:n을 1,2,...,n으로 변환
+                    positions = list(range(1, count + 1))
+                    logger.info(f"처음 {count}개 이미지 번역 실행: {count}")
+                    combined_positions.extend(positions)
+                    
+                elif action == 'last':
+                    count = action_info.get('count', 1)
+                    # last:n은 특별 처리 필요 (이미지 총 개수를 알아야 함)
+                    logger.info(f"마지막 {count}개 이미지 번역 실행: last:{count}")
+                    combined_positions.append(f"last:{count}")
+                    
+                elif action == 'specific':
+                    positions = action_info.get('positions', [])
+                    logger.info(f"특정 위치 이미지 번역 실행: {positions}")
+                    combined_positions.extend(positions)
+                    
+                elif action == 'yes':
+                    # 기본 동작: 모든 이미지 번역
+                    logger.info("모든 이미지 번역 실행")
+                    combined_positions.append('all')
+            
+            # 통합된 위치들을 하나의 명령어로 변환하여 처리
+            if combined_positions:
+                # 위치들을 쉼표로 연결하여 하나의 명령어로 만들기
+                combined_command = ','.join(str(pos) for pos in combined_positions)
+                logger.info(f"통합 이미지 번역 명령어: {combined_command}")
+                return self.image_translate(combined_command)
+            else:
+                logger.warning("복합 액션에서 처리할 위치가 없음")
+                return False
+                
+        except Exception as e:
+            logger.error(f"복합 이미지 번역 액션 처리 오류: {e}")
+            return False
+    
     def _execute_single_translate_action(self, action_info):
         """
-        단일 이미지 번역 액션 실행 (복합 액션용)
+        단일 이미지 번역 액션 실행 (복합 액션용) - 더 이상 사용하지 않음
         
         Args:
             action_info: 파싱된 단일 액션 정보

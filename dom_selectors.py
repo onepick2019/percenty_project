@@ -107,7 +107,7 @@ EDITGOODS_SELECTORS = {
     "PRODUCT_DETAIL_CLOSEEDIT": "//div[contains(@class, 'ant-col') and contains(@class, 'css-1li46mu')]//span[@role='img' and @aria-label='close' and contains(@class, 'anticon-close')]",
     
     # 상세페이지 편집 요소 선택자
-    "PRODUCT_DETAIL_OPENEDIT": "//button[@type='button' and contains(@class, 'ant-btn') and contains(@class, 'ant-btn-default') and contains(@class, 'sc-hsUFQk')][.//span[text()='일괄 편집']]",
+    "PRODUCT_DETAIL_OPENEDIT": "//button[@type='button' and contains(@class, 'ant-btn') and contains(@class, 'ant-btn-default') and contains(@class, 'sc-knefzF')][.//span[text()='일괄 편집']]",
     "PRODUCT_SOURCE_BUTTON": "//button[contains(@class, 'ck-source-editing-button')]",
     "PRODUCT_DETAIL_EDITIMAGE_SAVE": "//button[@type='button' and contains(@class, 'ant-btn') and contains(@class, 'ant-btn-primary')][.//span[text()='수정사항 저장']]",
     
