@@ -388,25 +388,48 @@ class ProductSearchDropdownManager:
         except NoSuchElementException:
             return False
     
-    def select_group_by_name(self, group_name):
+    def select_group_by_name(self, group_name, max_scrolls=10):
         """
-        그룹명으로 그룹 선택
+        그룹명으로 그룹 선택 (스크롤 지원)
         
         Args:
             group_name (str): 선택할 그룹명 (예: "신규수집")
+            max_scrolls (int): 최대 스크롤 횟수
             
         Returns:
             bool: 성공 여부
         """
-        logger.info(f"그룹 '{group_name}' 선택 시도")
+        logger.info(f"그룹 '{group_name}' 선택 시도 (스크롤 지원)")
         
         try:
-            # 그룹 옵션들 찾기
-            options = WebDriverWait(self.driver, 5).until(
-                EC.presence_of_all_elements_located((By.XPATH, self.group_option_selector))
-            )
+            # 먼저 현재 보이는 옵션들에서 찾기
+            if self._find_and_click_group_option(group_name):
+                logger.info(f"현재 화면에서 '{group_name}' 그룹을 찾았습니다.")
+                return True
             
-            logger.info(f"총 {len(options)}개의 그룹 옵션 발견")
+            # 현재 화면에서 찾지 못한 경우 스크롤하며 검색
+            logger.info(f"현재 화면에서 찾지 못함. 스크롤하며 검색 시작 (최대 {max_scrolls}회)")
+            return self._scroll_and_search_for_group(group_name, max_scrolls)
+            
+        except Exception as e:
+            logger.error(f"그룹 선택 중 오류: {e}")
+            return False
+    
+    def _find_and_click_group_option(self, group_name):
+        """
+        현재 보이는 그룹 옵션들에서 지정된 그룹명을 찾아 클릭
+        
+        Args:
+            group_name (str): 찾을 그룹명
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            # 그룹 옵션들 찾기
+            options = self.driver.find_elements(By.XPATH, self.group_option_selector)
+            
+            logger.info(f"현재 화면에서 {len(options)}개의 그룹 옵션 발견")
             
             # 각 옵션의 텍스트 확인하여 일치하는 그룹 찾기
             for i, option in enumerate(options):
@@ -434,15 +457,122 @@ class ProductSearchDropdownManager:
                     logger.warning(f"옵션 {i+1} 처리 중 오류: {e}")
                     continue
             
-            logger.error(f"그룹 '{group_name}'을 찾을 수 없음")
             return False
             
-        except TimeoutException:
-            logger.error("그룹 옵션들을 찾을 수 없음 (타임아웃)")
-            return False
         except Exception as e:
-            logger.error(f"그룹 선택 중 오류: {e}")
+            logger.error(f"그룹 옵션 찾기 중 오류: {e}")
             return False
+    
+    def _scroll_and_search_for_group(self, group_name, max_scrolls=10):
+        """
+        드롭다운 내에서 스크롤하며 그룹 검색
+        
+        Args:
+            group_name (str): 찾을 그룹명
+            max_scrolls (int): 최대 스크롤 횟수
+            
+        Returns:
+            bool: 그룹을 찾았는지 여부
+        """
+        try:
+            logger.info(f"드롭다운 내에서 '{group_name}' 그룹 스크롤 검색 (최대 {max_scrolls}회)")
+            
+            # 드롭다운 컨테이너 찾기 (스크롤 가능한 컨테이너 우선)
+            dropdown_selectors = [
+                "//div[contains(@class, 'rc-virtual-list-holder')]",
+                "//div[contains(@class, 'ant-select-dropdown') and not(contains(@class, 'ant-select-dropdown-hidden'))]",
+                "//div[contains(@class, 'ant-select-dropdown')]"
+            ]
+            
+            dropdown_container = None
+            for selector in dropdown_selectors:
+                try:
+                    dropdown_container = self.driver.find_element(By.XPATH, selector)
+                    logger.info(f"드롭다운 컨테이너 발견: {selector}")
+                    break
+                except:
+                    continue
+            
+            if not dropdown_container:
+                logger.error("드롭다운 컨테이너를 찾을 수 없음")
+                return False
+            
+            # 스크롤하며 검색
+            for scroll_count in range(max_scrolls):
+                logger.info(f"스크롤 {scroll_count + 1}/{max_scrolls}")
+                
+                # 현재 보이는 그룹들 중에서 찾기
+                if self._find_and_click_group_option(group_name):
+                    logger.info(f"스크롤 {scroll_count + 1}회 후 '{group_name}' 그룹을 찾았습니다.")
+                    return True
+                
+                # 아래로 스크롤 (여러 방법 시도)
+                scroll_success = False
+                
+                # 방법 1: clientHeight를 사용한 한 화면씩 스크롤
+                try:
+                    self.driver.execute_script("arguments[0].scrollTop += arguments[0].clientHeight;", dropdown_container)
+                    scroll_success = True
+                except:
+                    pass
+                
+                # 방법 2: 고정 픽셀 스크롤 (fallback)
+                if not scroll_success:
+                    try:
+                        self.driver.execute_script("arguments[0].scrollTop += 200;", dropdown_container)
+                        scroll_success = True
+                    except:
+                        pass
+                
+                # 방법 3: 마지막 옵션으로 스크롤
+                if not scroll_success:
+                    try:
+                        last_option = dropdown_container.find_elements(
+                            By.XPATH, ".//div[contains(@class, 'ant-select-item-option')]"
+                        )[-1]
+                        self.driver.execute_script("arguments[0].scrollIntoView();", last_option)
+                        scroll_success = True
+                    except:
+                        pass
+                
+                if scroll_success:
+                    time.sleep(0.3)  # 스크롤 후 대기
+                    
+                    # 스크롤 후 새로운 옵션이 로드되었는지 확인
+                    new_options = self.driver.find_elements(
+                        By.XPATH, "//div[contains(@class, 'ant-select-item-option')]"
+                    )
+                    logger.info(f"스크롤 후 {len(new_options)}개 옵션 확인")
+                else:
+                    logger.warning(f"스크롤 {scroll_count + 1} 실패")
+                    break  # 스크롤이 실패하면 더 이상 시도하지 않음
+            
+            logger.warning(f"최대 스크롤 횟수({max_scrolls})에 도달했지만 '{group_name}' 그룹을 찾지 못했습니다.")
+            
+            # 마지막으로 전체 옵션 목록 출력
+            self._log_all_available_options()
+            return False
+            
+        except Exception as e:
+            logger.error(f"드롭다운 스크롤 검색 오류: {e}")
+            return False
+    
+    def _log_all_available_options(self):
+        """
+        현재 드롭다운에서 사용 가능한 모든 옵션을 로그에 출력
+        """
+        try:
+            options = self.driver.find_elements(By.XPATH, self.group_option_selector)
+            logger.info(f"=== 현재 사용 가능한 모든 그룹 옵션 ({len(options)}개) ===")
+            for i, option in enumerate(options):
+                try:
+                    option_text = option.text.strip()
+                    logger.info(f"  {i+1}. '{option_text}'")
+                except:
+                    logger.info(f"  {i+1}. (텍스트 읽기 실패)")
+            logger.info("=== 옵션 목록 끝 ===")
+        except Exception as e:
+            logger.warning(f"옵션 목록 출력 중 오류: {e}")
     
     def select_group_in_search_dropdown(self, group_name):
         """
@@ -1170,6 +1300,56 @@ class ProductSearchDropdownManager:
         except Exception as e:
             logger.error(f"상품 그룹 이동 오류: {e}")
             return False
+    
+    def get_total_product_count(self, timeout=10):
+        """
+        전체 상품 수를 확인합니다.
+        
+        Args:
+            timeout (int): 대기 시간 (초)
+            
+        Returns:
+            int: 전체 상품 수 (확인 실패 시 -1)
+        """
+        try:
+            # 전체선택 체크박스 부분에서 총 상품 수 확인
+            # <span>총 24,025개 상품</span>
+            selectors = [
+                "//span[contains(text(), '총') and contains(text(), '개 상품')]",
+                "//div[contains(@class, 'ant-checkbox-wrapper')]//span[contains(text(), '총') and contains(text(), '개 상품')]",
+                "//label[contains(@class, 'ant-checkbox-wrapper')]//span[contains(text(), '총') and contains(text(), '개 상품')]"
+            ]
+            
+            for selector in selectors:
+                try:
+                    element = WebDriverWait(self.driver, timeout).until(
+                        EC.presence_of_element_located((By.XPATH, selector))
+                    )
+                    
+                    text = element.text.strip()
+                    logger.info(f"전체 상품 수 텍스트 발견: '{text}'")
+                    
+                    # "총 24,025개 상품" 형태에서 숫자 추출
+                    import re
+                    match = re.search(r'총\s*([0-9,]+)개\s*상품', text)
+                    if match:
+                        count_str = match.group(1).replace(',', '')
+                        count = int(count_str)
+                        logger.info(f"전체 상품 수 확인 성공: {count}개")
+                        return count
+                        
+                except TimeoutException:
+                    continue
+                except Exception as e:
+                    logger.warning(f"전체 상품 수 확인 중 오류 (선택자: {selector}): {e}")
+                    continue
+            
+            logger.warning("전체 상품 수를 확인할 수 없습니다")
+            return -1
+            
+        except Exception as e:
+            logger.error(f"전체 상품 수 확인 중 전체 오류: {e}")
+            return -1
      
 def get_product_search_dropdown_manager(driver):
     """

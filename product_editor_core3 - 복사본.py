@@ -8,7 +8,6 @@ import time
 import logging
 import pandas as pd
 import os
-
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -62,9 +61,7 @@ class ProductEditorCore3:
         'J': 'PRODUCT_TAB_OPTION',      # J열: 옵션 이미지 복사 -> 옵션션 탭
         'K': 'PRODUCT_TAB_DETAIL',      # K열: 이미지 번역 -> 상세페이지 탭
         'L': 'PRODUCT_TAB_DETAIL',      # L열: 이미지 태그 삽입 -> 상세페이지 탭
-        'M': 'PRODUCT_TAB_DETAIL',      # M열: HTML 업데이트 -> 상세페이지 탭
-        'N': 'PRODUCT_TAB_THUMBNAIL',   # N열: 썸네일 번역 -> 썸네일 탭
-        'O': 'PRODUCT_TAB_OPTION'       # O열: 옵션 이미지 번역 -> 옵션 탭
+        'M': 'PRODUCT_TAB_DETAIL'       # M열: HTML 업데이트 -> 상세페이지 탭
     }
     
     def __init__(self, driver, config=None):
@@ -288,15 +285,13 @@ class ProductEditorCore3:
                 elif 'group_name' in row:
                     target_group = row['group_name']
                 
-                # H~O열 데이터 추출 (엑셀의 H, I, J, K, L, M, N, O 컬럼)
+                # H~M열 데이터 추출 (엑셀의 H, I, J, K, L, M 컬럼)
                 h_data = row.iloc[7] if len(row) > 7 else None  # H열 (8번째 컬럼, 0-based index 7)
                 i_data = row.iloc[8] if len(row) > 8 else None  # I열
                 j_data = row.iloc[9] if len(row) > 9 else None  # J열
                 k_data = row.iloc[10] if len(row) > 10 else None  # K열
                 l_data = row.iloc[11] if len(row) > 11 else None  # L열
                 m_data = row.iloc[12] if len(row) > 12 else None  # M열 (13번째 컬럼, 0-based index 12)
-                n_data = row.iloc[13] if len(row) > 13 else None  # N열 (14번째 컬럼, 0-based index 13)
-                o_data = row.iloc[14] if len(row) > 14 else None  # O열 (15번째 컬럼, 0-based index 14)
                 
                 if provider_code and target_group:
                     task = {
@@ -307,9 +302,7 @@ class ProductEditorCore3:
                         'j_data': str(j_data) if pd.notna(j_data) else None,
                         'k_data': str(k_data) if pd.notna(k_data) else None,
                         'l_data': str(l_data) if pd.notna(l_data) else None,
-                        'm_data': str(m_data) if pd.notna(m_data) else None,
-                        'n_data': str(n_data) if pd.notna(n_data) else None,
-                        'o_data': str(o_data) if pd.notna(o_data) else None
+                        'm_data': str(m_data) if pd.notna(m_data) else None
                     }
                     task_list.append(task)
                 
@@ -386,14 +379,13 @@ class ProductEditorCore3:
             product_count = self._get_search_result_count()
             logger.info(f"키워드 '{keyword}' 검색 결과: {product_count}개 상품")
             
-            # 상품 수 제한 처리 (20개 이상인 경우에만)
+            # 상품 수 제한 처리
             if product_count > max_products:
                 logger.info(f"검색 결과가 {max_products}개를 초과합니다. 상품 수를 제한합니다.")
                 limited_count = self._limit_search_results(max_products)
                 logger.info(f"상품 수 제한 완료: {limited_count}개로 제한됨")
-                return min(limited_count, max_products)  # 최대값으로 제한
+                return limited_count
             
-            logger.info(f"검색된 상품 수({product_count})가 제한값({max_products}) 이하이므로 그대로 반환합니다.")
             return product_count
             
         except Exception as e:
@@ -488,8 +480,29 @@ class ProductEditorCore3:
             except Exception as e:
                 logger.warning(f"페이지 크기 조정 실패: {e}")
             
-            # 페이지 크기 조정이 불가능한 경우, 실제 상품 수 반환 (블라인드 처리 제거)
-            logger.info(f"페이지 크기 조정이 불가능하므로 실제 검색된 상품 수({current_count})를 반환합니다.")
+            # 페이지 크기 조정이 불가능한 경우, JavaScript로 초과 행 숨기기
+            try:
+                hide_script = f"""
+                var rows = document.querySelectorAll('tbody tr.ant-table-row');
+                for (var i = {max_products}; i < rows.length; i++) {{
+                    rows[i].style.display = 'none';
+                }}
+                """
+                self.driver.execute_script(hide_script)
+                time.sleep(DELAY_SHORT)
+                
+                # 숨긴 후 보이는 상품 수 확인
+                visible_rows = self.driver.find_elements(By.XPATH, "//tbody//tr[contains(@class, 'ant-table-row') and not(contains(@style, 'display: none'))]")
+                limited_count = len(visible_rows)
+                
+                logger.info(f"JavaScript로 상품 수 제한 완료: {limited_count}개")
+                return limited_count
+                
+            except Exception as e:
+                logger.warning(f"JavaScript 상품 숨기기 실패: {e}")
+            
+            # 모든 방법이 실패한 경우 원래 개수 반환
+            logger.warning(f"상품 수 제한 실패, 원래 개수({current_count}) 반환")
             return current_count
             
         except Exception as e:
@@ -568,10 +581,10 @@ class ProductEditorCore3:
     
     def process_product_modifications(self, task_data):
         """
-        상품 수정 작업 수행 (H~N열 데이터 기반)
+        상품 수정 작업 수행 (H~M열 데이터 기반)
         
         Args:
-            task_data: 작업 데이터 딕셔너리 (h_data, i_data, j_data, k_data, l_data, m_data, n_data 포함)
+            task_data: 작업 데이터 딕셔너리 (h_data, i_data, j_data, k_data, l_data, m_data 포함)
             
         Returns:
             bool: 성공 여부
@@ -617,58 +630,6 @@ class ProductEditorCore3:
                 logger.info("M열 데이터 처리 시작 (HTML 업데이트)")
                 if not self._process_m_data(task_data['m_data']):
                     logger.warning("M열 데이터 처리 실패")
-            
-            # N열 데이터 처리 (썸네일 번역)
-            if task_data.get('n_data'):
-                logger.info("N열 데이터 처리 시작 (썸네일 번역)")
-                if not self._process_n_data(task_data['n_data']):
-                    logger.warning("N열 데이터 처리 실패")
-            
-            # O열 데이터 처리 (옵션 이미지 번역)
-            if task_data.get('o_data'):
-                logger.info("O열 데이터 처리 시작 (옵션 이미지 번역)")
-                if not self._process_o_data(task_data['o_data']):
-                    logger.warning("O열 데이터 처리 실패")
-            
-            # K, N, O열 처리 완료 후 모달창 닫기
-            logger.info("K, N, O열 처리 완료 - 수정화면 모달창 닫기 시작")
-            
-            # 여러 번 ESC 키 시도
-            for esc_attempt in range(3):
-                ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-                time.sleep(DELAY_MEDIUM)
-                
-                # 모달창 닫힘 확인
-                modal_elements = self.driver.find_elements(By.CSS_SELECTOR, ".ant-modal, .ant-drawer")
-                visible_modals = [modal for modal in modal_elements if modal.is_displayed()]
-                
-                if not visible_modals:
-                    logger.info(f"수정화면 모달창 닫기 성공 (시도 {esc_attempt + 1}/3)")
-                    break
-                else:
-                    logger.warning(f"수정화면 모달창 아직 열려있음 (시도 {esc_attempt + 1}/3)")
-            
-            # 최종 모달창 상태 확인
-            try:
-                time.sleep(DELAY_SHORT)  # 모달창 완전 닫힘 대기
-                
-                modal_elements = self.driver.find_elements(By.CSS_SELECTOR, ".ant-modal, .ant-drawer")
-                visible_modals = [modal for modal in modal_elements if modal.is_displayed()]
-                
-                if visible_modals:
-                    logger.error("수정화면 모달창이 완전히 닫히지 않음 - 그룹이동 실패 가능성 높음")
-                    # 추가 강제 닫기 시도
-                    for modal in visible_modals:
-                        try:
-                            close_btn = modal.find_element(By.CSS_SELECTOR, ".ant-modal-close, .ant-drawer-close")
-                            close_btn.click()
-                            time.sleep(DELAY_VERY_SHORT)
-                        except:
-                            pass
-                else:
-                    logger.info("그룹이동 시작 전 모달창 닫힘 확인 완료")
-            except Exception as final_modal_check_error:
-                logger.error(f"그룹이동 전 모달창 상태 최종 확인 중 오류: {final_modal_check_error}")
             
             logger.info("상품 수정 작업 완료")
             return True
@@ -795,18 +756,6 @@ class ProductEditorCore3:
                         return {'action': 'specific', 'positions': positions}
                     except ValueError:
                         logger.warning(f"잘못된 위치 형식: {value}")
-                        return {'action': 'no'}
-                
-                elif prefix == 'special':
-                    try:
-                        max_position = int(value)
-                        if max_position <= 0:
-                            logger.warning(f"잘못된 special 값 (0 이하): {max_position}")
-                            return {'action': 'no'}
-                        logger.info(f"special:{max_position} 형식 - 최대 {max_position}번째까지 스캔")
-                        return {'action': 'special', 'max_position': max_position}
-                    except ValueError:
-                        logger.warning(f"잘못된 special 형식: {value}")
                         return {'action': 'no'}
                 
                 else:
@@ -1783,42 +1732,10 @@ class ProductEditorCore3:
                 logger.info("K열: 이미지 번역 작업 없음")
                 return True
             
-            # 상세페이지 탭으로 이동 전 모달창 상태 안정화
-            logger.info("K열: 상세페이지 탭 클릭 전 모달창 상태 확인")
-            time.sleep(DELAY_SHORT)  # 모달창 안정화 대기
-            
-            # 모달창이 완전히 로드되었는지 확인
-            try:
-                modal_elements = self.driver.find_elements(By.CSS_SELECTOR, ".ant-modal, .ant-drawer")
-                visible_modals = [modal for modal in modal_elements if modal.is_displayed()]
-                
-                if visible_modals:
-                    logger.info("K열: 모달창 확인됨 - 상세페이지 탭 클릭 진행")
-                else:
-                    logger.warning("K열: 모달창이 감지되지 않음 - 탭 클릭 시도")
-            except Exception as modal_check_error:
-                logger.warning(f"K열: 모달창 상태 확인 중 오류: {modal_check_error}")
-            
             # 상세페이지 탭으로 이동 (K열은 이미지 번역 작업)
             tab_key = self.COLUMN_TAB_MAPPING.get('K', 'PRODUCT_TAB_DETAIL')
-            logger.info(f"K열: 상세페이지 탭 클릭 시도 - {tab_key}")
-            
-            try:
-                smart_click(self.driver, UI_ELEMENTS[tab_key], DELAY_VERY_SHORT)
-                time.sleep(DELAY_SHORT)
-                logger.info("K열: 상세페이지 탭 클릭 성공")
-            except Exception as tab_click_error:
-                logger.error(f"K열: 상세페이지 탭 클릭 실패: {tab_click_error}")
-                # 탭 클릭 실패 시 재시도
-                try:
-                    logger.info("K열: 상세페이지 탭 클릭 재시도")
-                    time.sleep(DELAY_SHORT)
-                    smart_click(self.driver, UI_ELEMENTS[tab_key], DELAY_VERY_SHORT)
-                    time.sleep(DELAY_SHORT)
-                    logger.info("K열: 상세페이지 탭 클릭 재시도 성공")
-                except Exception as retry_error:
-                    logger.error(f"K열: 상세페이지 탭 클릭 재시도 실패: {retry_error}")
-                    return False
+            smart_click(self.driver, UI_ELEMENTS[tab_key], DELAY_VERY_SHORT)
+            time.sleep(DELAY_SHORT)
             
             # 복합 명령어 처리
             if action_info['action'] == 'combined':
@@ -1828,11 +1745,6 @@ class ProductEditorCore3:
                 
                 # 복합 액션은 통합 처리 방식 사용 (모달창 한 번만 열기)
                 success = self._execute_combined_translate_actions(actions)
-            elif action_info['action'] == 'special':
-                # special 액션 처리
-                max_position = action_info.get('max_position', 10)
-                logger.info(f"제한된 스캔 이미지 번역 시작: special:{max_position}")
-                success = self.image_translate(f"special:{max_position}")
             else:
                 # 단일 명령어 처리
                 success = self.image_translate(k_data)
@@ -1883,11 +1795,6 @@ class ProductEditorCore3:
                     positions = action_info.get('positions', [])
                     logger.info(f"특정 위치 이미지 번역 실행: {positions}")
                     combined_positions.extend(positions)
-                    
-                elif action == 'special':
-                    max_position = action_info.get('max_position', 10)
-                    logger.info(f"제한된 스캔 이미지 번역 실행: special:{max_position}")
-                    combined_positions.append(f"special:{max_position}")
                     
                 elif action == 'yes':
                     # 기본 동작: 모든 이미지 번역
@@ -2256,18 +2163,22 @@ class ProductEditorCore3:
             smart_click(self.driver, UI_ELEMENTS["PRODUCT_TAB_DETAIL"], DELAY_VERY_SHORT)
             time.sleep(DELAY_SHORT)
             
-            # 소스 버튼 클릭(버튼 눌러서 입력상태 만들기)
-            smart_click(self.driver, UI_ELEMENTS["PRODUCT_SOURCE_BUTTON"], DELAY_VERY_SHORT)
+            # HTML 소스 편집 모드 열기
+            smart_click(self.driver, UI_ELEMENTS["PRODUCT_HTMLSOURCE_OPEN"], DELAY_VERY_SHORT)
             time.sleep(DELAY_SHORT)
             
-            # M열에서 가져온 값 붙여넣기 (멀티브라우저 간섭 방지를 위해 Selenium 사용)
-            # 소스 편집 상태에서 커서가 맨 앞에 위치하므로 바로 붙여넣기
-            self.driver.switch_to.active_element.send_keys(str(m_data))
-            time.sleep(DELAY_SHORT)
-
+            # HTML 텍스트 영역 찾기 및 내용 업데이트
+            textarea_selector = UI_ELEMENTS["PRODUCT_HTMLSOURCE_TEXTAREA"]["dom_selector"]
+            textarea_element = self.driver.find_element(By.XPATH, textarea_selector)
             
-            # 소스 버튼 클릭(다시 버튼 눌러서 저장하기기)
-            smart_click(self.driver, UI_ELEMENTS["PRODUCT_SOURCE_BUTTON"], DELAY_VERY_SHORT)
+            # 멀티브라우저 간섭 방지를 위해 element.clear() 사용
+            textarea_element.click()
+            time.sleep(DELAY_VERY_SHORT)
+            textarea_element.clear()  # select_all 대신 clear 사용
+            textarea_element.send_keys(str(m_data))
+            
+            # HTML 저장
+            smart_click(self.driver, UI_ELEMENTS["PRODUCT_HTMLSOURCE_SAVE"], DELAY_VERY_SHORT)
             time.sleep(DELAY_SHORT)
             
             logger.info("M열: HTML 업데이트 완료")
@@ -2275,166 +2186,6 @@ class ProductEditorCore3:
             
         except Exception as e:
             logger.error(f"M열 데이터 처리 중 오류: {e}")
-            return False
-    
-    def _process_n_data(self, n_data):
-        """
-        N열 데이터 처리 (썸네일 번역)
-        
-        Args:
-            n_data: N열 데이터 (썸네일 번역 명령어)
-            
-        Returns:
-            bool: 성공 여부
-        """
-        try:
-            logger.info(f"N열 데이터 처리 (썸네일 번역): {n_data}")
-            
-            # 명령어 파싱
-            action_info = self._parse_action_command(n_data)
-            
-            if action_info['action'] == 'no':
-                logger.info("N열: 썸네일 번역 작업 없음")
-                return True
-            
-            # 썸네일 탭으로 이동 전 모달창 상태 안정화
-            logger.info("N열: 썸네일 탭 클릭 전 모달창 상태 확인")
-            time.sleep(DELAY_SHORT)  # 모달창 안정화 대기
-            
-            # 모달창이 완전히 로드되었는지 확인
-            try:
-                modal_elements = self.driver.find_elements(By.CSS_SELECTOR, ".ant-modal, .ant-drawer")
-                visible_modals = [modal for modal in modal_elements if modal.is_displayed()]
-                
-                if visible_modals:
-                    logger.info("N열: 모달창 확인됨 - 썸네일 탭 클릭 진행")
-                else:
-                    logger.warning("N열: 모달창이 감지되지 않음 - 탭 클릭 시도")
-            except Exception as modal_check_error:
-                logger.warning(f"N열: 모달창 상태 확인 중 오류: {modal_check_error}")
-            
-            # 썸네일 탭으로 이동 (N열은 썸네일 번역 작업)
-            tab_key = self.COLUMN_TAB_MAPPING.get('N', 'PRODUCT_TAB_THUMBNAIL')
-            logger.info(f"N열: 썸네일 탭 클릭 시도 - {tab_key}")
-            
-            try:
-                smart_click(self.driver, UI_ELEMENTS[tab_key], DELAY_VERY_SHORT)
-                time.sleep(DELAY_SHORT)
-                logger.info("N열: 썸네일 탭 클릭 성공")
-            except Exception as tab_click_error:
-                logger.error(f"N열: 썸네일 탭 클릭 실패: {tab_click_error}")
-                # 탭 클릭 실패 시 재시도
-                try:
-                    logger.info("N열: 썸네일 탭 클릭 재시도")
-                    time.sleep(DELAY_SHORT)
-                    smart_click(self.driver, UI_ELEMENTS[tab_key], DELAY_VERY_SHORT)
-                    time.sleep(DELAY_SHORT)
-                    logger.info("N열: 썸네일 탭 클릭 재시도 성공")
-                except Exception as retry_error:
-                    logger.error(f"N열: 썸네일 탭 클릭 재시도 실패: {retry_error}")
-                    return False
-            
-            # 복합 명령어 처리
-            if action_info['action'] == 'combined':
-                # 복합 명령어 처리 (예: first:1/last:1)
-                actions = action_info.get('actions', [])
-                logger.info(f"복합 썸네일 번역 시작: {len(actions)}개 액션")
-                
-                # 복합 액션은 통합 처리 방식 사용 (모달창 한 번만 열기)
-                success = self._execute_combined_translate_actions(actions)
-            else:
-                # 단일 명령어 처리 - N열 썸네일 이미지 번역 메서드 사용
-                success = self.thumbnailimage_translate(n_data)
-
-            if success:
-                logger.info("N열: 썸네일 번역 완료")
-            else:
-                logger.warning("N열: 썸네일 번역 실패")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"N열 데이터 처리 중 오류: {e}")
-            return False
-    
-    def _process_o_data(self, o_data):
-        """
-        O열 데이터 처리 (옵션 이미지 번역)
-        
-        Args:
-            o_data: O열 데이터 (옵션 이미지 번역 명령어)
-            
-        Returns:
-            bool: 성공 여부
-        """
-        try:
-            logger.info(f"O열 데이터 처리 (옵션 이미지 번역): {o_data}")
-            
-            # 명령어 파싱
-            action_info = self._parse_action_command(o_data)
-            
-            if action_info['action'] == 'no':
-                logger.info("O열: 옵션 이미지 번역 작업 없음")
-                return True
-            
-            # 옵션 탭으로 이동 전 모달창 상태 안정화
-            logger.info("O열: 옵션 탭 클릭 전 모달창 상태 확인")
-            time.sleep(DELAY_SHORT)  # 모달창 안정화 대기
-            
-            # 모달창이 완전히 로드되었는지 확인
-            try:
-                modal_elements = self.driver.find_elements(By.CSS_SELECTOR, ".ant-modal, .ant-drawer")
-                visible_modals = [modal for modal in modal_elements if modal.is_displayed()]
-                
-                if visible_modals:
-                    logger.info("O열: 모달창 확인됨 - 옵션 탭 클릭 진행")
-                else:
-                    logger.warning("O열: 모달창이 감지되지 않음 - 탭 클릭 시도")
-            except Exception as modal_check_error:
-                logger.warning(f"O열: 모달창 상태 확인 중 오류: {modal_check_error}")
-            
-            # 옵션 탭으로 이동 (O열은 옵션 이미지 번역 작업)
-            tab_key = self.COLUMN_TAB_MAPPING.get('O', 'PRODUCT_TAB_OPTION')
-            logger.info(f"O열: 옵션 탭 클릭 시도 - {tab_key}")
-            
-            try:
-                smart_click(self.driver, UI_ELEMENTS[tab_key], DELAY_VERY_SHORT)
-                time.sleep(DELAY_SHORT)
-                logger.info("O열: 옵션 탭 클릭 성공")
-            except Exception as tab_click_error:
-                logger.error(f"O열: 옵션 탭 클릭 실패: {tab_click_error}")
-                # 탭 클릭 실패 시 재시도
-                try:
-                    logger.info("O열: 옵션 탭 클릭 재시도")
-                    time.sleep(DELAY_SHORT)
-                    smart_click(self.driver, UI_ELEMENTS[tab_key], DELAY_VERY_SHORT)
-                    time.sleep(DELAY_SHORT)
-                    logger.info("O열: 옵션 탭 클릭 재시도 성공")
-                except Exception as retry_error:
-                    logger.error(f"O열: 옵션 탭 클릭 재시도 실패: {retry_error}")
-                    return False
-            
-            # 복합 명령어 처리
-            if action_info['action'] == 'combined':
-                # 복합 명령어 처리 (예: first:1/last:1)
-                actions = action_info.get('actions', [])
-                logger.info(f"복합 옵션 이미지 번역 시작: {len(actions)}개 액션")
-                
-                # 복합 액션은 통합 처리 방식 사용 (모달창 한 번만 열기)
-                success = self._execute_combined_translate_actions(actions)
-            else:
-                # 단일 명령어 처리 - optionimage_translate 메서드 사용
-                success = self.optionimage_translate(o_data)
-
-            if success:
-                logger.info("O열: 옵션 이미지 번역 완료")
-            else:
-                logger.warning("O열: 옵션 이미지 번역 실패")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"O열 데이터 처리 중 오류: {e}")
             return False
     
     def close_modal(self):
@@ -2609,17 +2360,18 @@ class ProductEditorCore3:
             
             total_processed = 0
             
-            # 키워드로 상품 검색 (상품 수 20개로 제한)
-            product_count = self.search_products_by_keyword(keyword, max_products=20)
-            
-            if product_count == 0:
-                logger.info(f"키워드 '{keyword}'로 검색된 상품이 없습니다. 작업 완료.")
-                return True, 0
-            
-            logger.info(f"현재 페이지에 {product_count}개 상품 발견 (최대 20개로 제한됨)")
-            
-            # 현재 페이지의 모든 상품 처리
-            for i in range(product_count):  # 제한된 상품 수만큼 처리
+            while True:
+                # 키워드로 상품 검색 (상품 수 20개로 제한)
+                product_count = self.search_products_by_keyword(keyword, max_products=20)
+                
+                if product_count == 0:
+                    logger.info(f"키워드 '{keyword}'로 검색된 상품이 없습니다. 작업 완료.")
+                    break
+                
+                logger.info(f"현재 페이지에 {product_count}개 상품 발견 (최대 20개로 제한됨)")
+                
+                # 현재 페이지의 모든 상품 처리
+                for i in range(product_count):  # 제한된 상품 수만큼 처리
                     logger.info(f"상품 {i+1}/{product_count} 처리 중")
                     
                     # 두 번째 상품부터는 화면 최상단으로 이동
@@ -2637,6 +2389,46 @@ class ProductEditorCore3:
                     if not self.process_product_modifications(task_data):
                         logger.warning(f"상품 {i+1} 수정 작업 실패")
                     
+                    # 수정화면 모달창 강제 닫기 (개별상품이동을 위해)
+                    logger.info(f"상품 {i+1} 수정화면 모달창 강제 닫기 시작")
+                    
+                    # 여러 번 ESC 키 시도
+                    for esc_attempt in range(3):
+                        ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+                        time.sleep(DELAY_MEDIUM)
+                        
+                        # 모달창 닫힘 확인
+                        modal_elements = self.driver.find_elements(By.CSS_SELECTOR, ".ant-modal, .ant-drawer")
+                        visible_modals = [modal for modal in modal_elements if modal.is_displayed()]
+                        
+                        if not visible_modals:
+                            logger.info(f"상품 {i+1} 수정화면 모달창 닫기 성공 (시도 {esc_attempt + 1}/3)")
+                            break
+                        else:
+                            logger.warning(f"상품 {i+1} 수정화면 모달창 아직 열려있음 (시도 {esc_attempt + 1}/3)")
+                    
+                    # 최종 모달창 상태 확인
+                    try:
+                        time.sleep(DELAY_SHORT)  # 모달창 완전 닫힘 대기 최적화
+                        
+                        modal_elements = self.driver.find_elements(By.CSS_SELECTOR, ".ant-modal, .ant-drawer")
+                        visible_modals = [modal for modal in modal_elements if modal.is_displayed()]
+                        
+                        if visible_modals:
+                            logger.error(f"상품 {i+1} 수정화면 모달창이 완전히 닫히지 않음 - 그룹이동 실패 가능성 높음")
+                            # 추가 강제 닫기 시도
+                            for modal in visible_modals:
+                                try:
+                                    close_btn = modal.find_element(By.CSS_SELECTOR, ".ant-modal-close, .ant-drawer-close")
+                                    close_btn.click()
+                                    time.sleep(DELAY_VERY_SHORT)
+                                except:
+                                    pass
+                        else:
+                            logger.info(f"상품 {i+1} 그룹이동 시작 전 모달창 닫힘 확인 완료")
+                    except Exception as final_modal_check_error:
+                        logger.error(f"상품 {i+1} 그룹이동 전 모달창 상태 최종 확인 중 오류: {final_modal_check_error}")
+                    
                     # 상품을 target_group으로 이동
                     if not self.move_product_to_target_group(target_group):
                         logger.error(f"상품 {i+1} 그룹 이동 실패")
@@ -2645,6 +2437,11 @@ class ProductEditorCore3:
                     
                     # 작업 간 대기
                     time.sleep(DELAY_SHORT)
+                
+                logger.info(f"현재 페이지 처리 완료. 다음 페이지 확인...")
+                
+                # 다음 페이지가 있는지 확인하기 위해 다시 검색
+                time.sleep(DELAY_MEDIUM)
             
             logger.info(f"키워드 '{keyword}' 총 {total_processed}개 상품 처리 완료")
             return True, total_processed
@@ -2655,7 +2452,7 @@ class ProductEditorCore3:
     
     def image_translate(self, action_value):
         """
-        K열, N열, O열 이미지 번역 액션을 처리하는 메서드
+        K열 image_translate 액션을 처리하는 메서드 (하이브리드 매니저로 위임)
         
         Args:
             action_value (str): 액션 값 (예: "first:1", "first:2", "specific:2", "specific:2,3")
@@ -2663,31 +2460,7 @@ class ProductEditorCore3:
         Returns:
             bool: 성공 여부
         """
-        return self.image_translation_handler.image_translate(action_value, 'detail')
-        
-    def thumbnailimage_translate(self, action_value):
-        """
-        N열 썸네일 이미지 번역 액션을 처리하는 메서드
-        
-        Args:
-            action_value (str): 액션 값
-            
-        Returns:
-            bool: 성공 여부
-        """
-        return self.image_translation_handler.image_translate(action_value, 'thumbnail')
-        
-    def optionimage_translate(self, action_value):
-        """
-        O열 옵션 이미지 번역 액션을 처리하는 메서드
-        
-        Args:
-            action_value (str): 액션 값
-            
-        Returns:
-            bool: 성공 여부
-        """
-        return self.image_translation_handler.image_translate(action_value, 'option')
+        return self.image_translation_handler.image_translate(action_value)
     
     def update_driver_references(self, new_driver):
         """

@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-6-1단계 동적 업로드 처리 코어 (market_id 시트 기반)
+"""6-1단계 동적 업로드 처리 코어 (market_id 시트 기반)
 
 percenty_id.xlsx의 market_id 시트를 파싱하여 동적으로 업로드를 진행합니다.
 - 로그인 아이디와 매핑되는 행들을 순차적으로 처리
 - 11번가 마켓 설정 및 API 연동
-- 동적 그룹 선택 및 업로드 진행
+- 등록상품관리에서 동적 그룹 선택 및 업로드 진행
 """
 
 import logging
@@ -16,7 +15,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-from dropdown_utils4 import DropdownUtils4
+from dropdown_utils2 import get_product_search_dropdown_manager
 from upload_utils import UploadUtils
 from market_manager import MarketManager
 from market_utils import MarketUtils
@@ -25,7 +24,7 @@ from market_manager_coupang import CoupangMarketManager
 
 logger = logging.getLogger(__name__)
 
-class ProductEditorCore6_1Dynamic:
+class ProductEditorCore6_Dynamic3:
     """6-1단계 동적 업로드 처리 코어 클래스"""
     
     def __init__(self, driver, account_id, excel_path="percenty_id.xlsx"):
@@ -35,7 +34,7 @@ class ProductEditorCore6_1Dynamic:
         self.wait = WebDriverWait(driver, 10)
         
         # 유틸리티 클래스 초기화
-        self.dropdown_utils = DropdownUtils4(driver)
+        self.dropdown_utils = get_product_search_dropdown_manager(driver)
         self.upload_utils = UploadUtils(driver)
         self.market_utils = MarketUtils(driver, logger)
         self.market_manager = MarketManager(driver)
@@ -43,7 +42,7 @@ class ProductEditorCore6_1Dynamic:
         # 스마트스토어 API 키 설정 상태 추적
         self.smartstore_api_configured = False
         
-        logger.info(f"ProductEditorCore6_1Dynamic 초기화 완료 - 계정: {account_id}")
+        logger.info(f"ProductEditorCore6_Dynamic3 초기화 완료 - 계정: {account_id}")
     
     def load_market_config_from_excel(self):
         """
@@ -268,6 +267,7 @@ class ProductEditorCore6_1Dynamic:
                 logger.info("스마트스토어 API 키가 없어서 입력을 건너뜁니다.")
                 self.smartstore_api_configured = False  # 스마트스토어 API 키 미설정 표시
             
+            """
             # 3-6. 쿠팡 API 키 입력
             coupang_id = market_config.get('coupang_id', '')
             coupang_code = market_config.get('coupang_code', '')
@@ -287,6 +287,7 @@ class ProductEditorCore6_1Dynamic:
             else:
                 logger.info("쿠팡 API 키가 불완전하여 입력을 건너뜁니다.")
                 self.coupang_api_configured = False  # 쿠팡 API 키 미설정 표시
+            """
             
             # API 키가 하나도 설정되지 않은 경우
             if not api_setup_success:
@@ -1333,15 +1334,15 @@ class ProductEditorCore6_1Dynamic:
                 pass
             return False
     
-    def _navigate_to_product_registration(self):
+    def _navigate_to_product_management(self):
         """
-        신규상품등록 화면으로 전환합니다.
+        등록상품관리 화면으로 전환합니다.
         
         Returns:
             bool: 성공 여부
         """
         try:
-            logger.info("신규상품등록 화면으로 전환 시작")
+            logger.info("등록상품관리 화면으로 전환 시작")
             
             # 마켓설정 화면에서 DOM 간섭을 방지하기 위해 페이지 새로고침
             logger.info("DOM 간섭 방지를 위한 페이지 새로고침 실행")
@@ -1349,36 +1350,36 @@ class ProductEditorCore6_1Dynamic:
             time.sleep(3)  # 새로고침 후 대기
             logger.info("페이지 새로고침 완료")
             
-            # DOM 선택자 - span.ant-menu-title-content 중에서 '신규 상품 등록' 텍스트를 가진 요소
+            # DOM 선택자 - span.ant-menu-title-content 중에서 '등록 상품 관리' 텍스트를 가진 요소
             selectors = [
-                "//span[@class='ant-menu-title-content' and text()='신규 상품 등록']",
-                "//span[contains(@class, 'ant-menu-title-content')][contains(., '신규 상품')]",
-                "//li[contains(@data-menu-id, 'PRODUCT_REGISTER')]//span[contains(@class, 'ant-menu-title-content')]"
+                "//span[@class='ant-menu-title-content' and text()='등록 상품 관리']",
+                "//span[contains(@class, 'ant-menu-title-content')][contains(., '등록 상품')]",
+                "//li[contains(@data-menu-id, 'PRODUCT_MANAGE')]//span[contains(@class, 'ant-menu-title-content')]"
             ]
             
             for selector in selectors:
                 try:
                     element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
                     element.click()
-                    logger.info("신규상품등록 메뉴 클릭 완료")
+                    logger.info("등록상품관리 메뉴 클릭 완료")
                     
-                    # 신규상품등록 화면 로드 대기
+                    # 등록상품관리 화면 로드 대기
                     time.sleep(5)
                     
                     # 스크롤을 최상단으로 초기화
                     self.driver.execute_script("window.scrollTo(0, 0);")
                     logger.info("스크롤 위치를 최상단으로 초기화")
                     
-                    logger.info("신규상품등록 화면으로 전환 완료")
+                    logger.info("등록상품관리 화면으로 전환 완료")
                     return True
                 except TimeoutException:
                     continue
             
-            logger.error("신규상품등록 화면 전환 실패 - 요소를 찾을 수 없음")
+            logger.error("등록상품관리 화면 전환 실패 - 요소를 찾을 수 없음")
             return False
             
         except Exception as e:
-            logger.error(f"신규상품등록 화면 전환 중 오류 발생: {e}")
+            logger.error(f"등록상품관리 화면 전환 중 오류 발생: {e}")
             return False
     
     def _select_dynamic_group(self, group_name):
@@ -1429,6 +1430,7 @@ class ProductEditorCore6_1Dynamic:
     def _execute_product_upload_workflow(self, group_name, market_config):
         """
         product_editor_core6_1의 상품 업로드 워크플로우를 실행합니다.
+        쿠팡을 포함한 미업로드 상품을 처리합니다.
         
         Args:
             group_name (str): 업로드할 그룹명
@@ -1547,7 +1549,7 @@ class ProductEditorCore6_1Dynamic:
         try:
             logger.info("상품 수 확인")
             
-            # dropdown_utils4의 get_total_product_count 메서드 사용
+            # dropdown_utils2의 get_total_product_count 메서드 사용
             product_count = self.dropdown_utils.get_total_product_count()
             
             if product_count == -1:
@@ -1574,7 +1576,7 @@ class ProductEditorCore6_1Dynamic:
         try:
             logger.info("전체 상품 선택")
             
-            # dropdown_utils4의 select_all_products 메서드 사용
+            # dropdown_utils2의 select_all_products 메서드 사용
             if not self.dropdown_utils.select_all_products():
                 logger.error("전체 상품 선택 실패")
                 return False
@@ -1674,9 +1676,9 @@ class ProductEditorCore6_1Dynamic:
                     self._ensure_main_tab_focus()
                     continue
                 
-                # 2-2. 신규상품등록 화면으로 전환
-                if not self._navigate_to_product_registration():
-                    logger.error(f"신규상품등록 화면 전환 실패")
+                # 2-2. 등록상품관리 화면으로 전환
+                if not self._navigate_to_product_management():
+                    logger.error(f"등록상품관리 화면 전환 실패")
                     self._ensure_main_tab_focus()
                     continue
                 
@@ -1685,7 +1687,12 @@ class ProductEditorCore6_1Dynamic:
                     logger.error(f"동적 그룹 선택 실패: {market_config['groupname']}")
                     continue
                 
-                # 2-4. 상품 업로드 워크플로우 실행 (product_editor_core6_1 기능 통합)
+                # 2-4. 미업로드 상품 검색 워크플로우
+                if not self._search_unuploaded_products():
+                    logger.error("미업로드 상품 검색 실패")
+                    continue
+                
+                # 2-5. 상품 업로드 워크플로우 실행 (product_editor_core6_1 기능 통합)
                 if not self._execute_product_upload_workflow(market_config['groupname'], market_config):
                     logger.error(f"상품 업로드 워크플로우 실패: {market_config['groupname']}")
                     continue
@@ -2083,6 +2090,176 @@ class ProductEditorCore6_1Dynamic:
             
         except Exception as e:
             logger.error(f"쿠팡 API 키 입력 중 오류 발생: {e}")
+            return False
+    
+    def _search_unuploaded_products(self):
+        """
+        미업로드 상품 검색 워크플로우를 실행합니다.
+        1. 상태 드롭박스에서 '미업로드' 선택
+        2. 마켓에서 '쿠팡' 선택
+        3. 상품 검색 버튼 클릭
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        try:
+            logger.info("미업로드 상품 검색 워크플로우 시작")
+            
+            # 1. 상태 드롭박스에서 '미업로드' 선택
+            if not self._select_status_dropdown():
+                logger.error("상태 드롭박스 선택 실패")
+                return False
+            
+            # 2. 마켓에서 '쿠팡' 선택
+            if not self._select_coupang_market():
+                logger.error("쿠팡 마켓 선택 실패")
+                return False
+            
+            # 3. 상품 검색 버튼 클릭
+            if not self._click_product_search_button():
+                logger.error("상품 검색 버튼 클릭 실패")
+                return False
+            
+            logger.info("미업로드 상품 검색 워크플로우 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"미업로드 상품 검색 워크플로우 중 오류 발생: {e}")
+            return False
+    
+    def _select_status_dropdown(self):
+        """
+        상태 드롭박스를 열고 '미업로드'를 선택합니다.
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        try:
+            logger.info("상태 드롭박스에서 '미업로드' 선택 시작")
+            
+            # 상태 드롭박스 클릭하여 열기
+            status_dropdown_selectors = [
+                "//div[contains(@class, 'ant-select') and .//span[contains(text(), '상태 검색')]]",
+                "//div[contains(@class, 'ant-select-selector') and .//span[contains(text(), '상태 검색')]]",
+                "//span[contains(text(), '상태 검색')]/ancestor::div[contains(@class, 'ant-select')]"
+            ]
+            
+            dropdown_clicked = False
+            for selector in status_dropdown_selectors:
+                try:
+                    dropdown_element = self.wait.until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    dropdown_element.click()
+                    time.sleep(1)
+                    dropdown_clicked = True
+                    logger.info("상태 드롭박스 클릭 성공")
+                    break
+                except (TimeoutException, NoSuchElementException):
+                    continue
+            
+            if not dropdown_clicked:
+                logger.error("상태 드롭박스를 찾을 수 없습니다")
+                return False
+            
+            # '미업로드' 옵션 선택
+            unuploaded_option_selectors = [
+                "//div[contains(@class, 'ant-select-item') and contains(text(), '미업로드')]",
+                "//div[contains(@class, 'rc-virtual-list-holder')]//div[contains(text(), '미업로드')]",
+                "//div[@role='option' and contains(text(), '미업로드')]"
+            ]
+            
+            for selector in unuploaded_option_selectors:
+                try:
+                    option_element = self.wait.until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    option_element.click()
+                    time.sleep(1)
+                    logger.info("'미업로드' 옵션 선택 성공")
+                    return True
+                except (TimeoutException, NoSuchElementException):
+                    continue
+            
+            logger.error("'미업로드' 옵션을 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            logger.error(f"상태 드롭박스 선택 중 오류 발생: {e}")
+            return False
+    
+    def _select_coupang_market(self):
+        """
+        마켓 선택 영역에서 '쿠팡' 체크박스를 선택합니다.
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        try:
+            logger.info("마켓에서 '쿠팡' 선택 시작")
+            
+            # 쿠팡 체크박스 선택자들
+            coupang_selectors = [
+                "//label[contains(@class, 'ant-checkbox-wrapper') and .//span[text()='쿠팡']]",
+                "//span[text()='쿠팡']/ancestor::label[contains(@class, 'ant-checkbox-wrapper')]",
+                "//span[text()='쿠팡']/preceding-sibling::span[contains(@class, 'ant-checkbox')]",
+                "//span[text()='쿠팡']"
+            ]
+            
+            for selector in coupang_selectors:
+                try:
+                    coupang_element = self.wait.until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    coupang_element.click()
+                    time.sleep(1)
+                    logger.info("'쿠팡' 마켓 선택 성공")
+                    return True
+                except (TimeoutException, NoSuchElementException):
+                    continue
+            
+            logger.error("'쿠팡' 마켓 체크박스를 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            logger.error(f"쿠팡 마켓 선택 중 오류 발생: {e}")
+            return False
+    
+    def _click_product_search_button(self):
+        """
+        상품 검색 버튼을 클릭합니다.
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        try:
+            logger.info("상품 검색 버튼 클릭 시작")
+            
+            # 상품 검색 버튼 선택자들
+            search_button_selectors = [
+                "//button[@id='filter_search_button_id']",
+                "//button[contains(@class, 'ant-btn-primary') and .//span[text()='상품 검색']]",
+                "//button[.//span[text()='상품 검색']]",
+                "//span[text()='상품 검색']/ancestor::button"
+            ]
+            
+            for selector in search_button_selectors:
+                try:
+                    search_button = self.wait.until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    search_button.click()
+                    time.sleep(2)  # 검색 결과 로딩 대기
+                    logger.info("상품 검색 버튼 클릭 성공")
+                    return True
+                except (TimeoutException, NoSuchElementException):
+                    continue
+            
+            logger.error("상품 검색 버튼을 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            logger.error(f"상품 검색 버튼 클릭 중 오류 발생: {e}")
             return False
 
 # 사용 예시

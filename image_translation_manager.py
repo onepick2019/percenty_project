@@ -52,13 +52,14 @@ class ImageTranslationManager:
         self.specific_handler = SpecificImageTranslationHandler(driver)
         self.human_delay = HumanLikeDelay()
     
-    def image_translate(self, action_value):
+    def image_translate(self, action_value, context='detail'):
         """
         이미지 번역 처리 메인 메서드
         액션 타입에 따라 최적의 핸들러를 선택
         
         Args:
             action_value (str): 액션 값 (예: "1,2,3", "specific:all", "auto_detect_chinese")
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
             bool: 성공 여부
@@ -82,7 +83,7 @@ class ImageTranslationManager:
             # 번역 전 중간 지연
             self.human_delay.medium_delay()
             
-            success = handler.image_translate(action_value)
+            success = handler.image_translate(action_value, context)
             
             if success:
                 logger.info("하이브리드 이미지 번역 완료")

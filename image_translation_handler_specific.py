@@ -3,6 +3,7 @@ import time
 import re
 import base64
 import random
+import logging
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -72,18 +73,19 @@ class ImageTranslationHandler:
         self.driver = driver
         self.human_delay = HumanLikeDelay()
     
-    def image_translate(self, action_value):
+    def image_translate(self, action_value, context='detail'):
         """
         이미지 번역 처리 메인 메서드
         
         Args:
             action_value (str): 액션 값 (예: "1,2,3")
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
             bool: 성공 여부
         """
         try:
-            logger.info(f"이미지 번역 시작: {action_value}")
+            logger.info(f"이미지 번역 시작: {action_value}, 컨텍스트: {context}")
             
             # 액션 파싱
             action_info = self._parse_image_translate_action(action_value)
@@ -91,14 +93,21 @@ class ImageTranslationHandler:
                 logger.error("이미지 번역 액션 파싱 실패")
                 return False
             
-            # 일괄편집 모달창 열기
-            if not self._open_bulk_edit_modal():
-                logger.error("일괄편집 모달창 열기 실패")
-                return False
+            # 컨텍스트별 모달창 열기
+            if context == 'detail':
+                # 상세페이지: 일괄편집 모달창 열기
+                if not self._open_bulk_edit_modal(context):
+                    logger.error("일괄편집 모달창 열기 실패")
+                    return False
+            else:
+                # 썸네일/옵션: 바로 편집하기 버튼 클릭
+                if not self._open_direct_edit_modal(context):
+                    logger.error(f"{context} 탭 직접 편집 모달 열기 실패")
+                    return False
             
             try:
                 # 이미지 번역 액션 처리
-                success = self._process_image_translate_action(action_info)
+                success = self._process_image_translate_action(action_info, context)
                 
                 if success:
                     logger.info("이미지 번역 완료")
@@ -240,12 +249,13 @@ class ImageTranslationHandler:
         logger.info(f"이미지 번역 액션 파싱 완료: {action_info}")
         return action_info
     
-    def _process_image_translate_action(self, action_info):
+    def _process_image_translate_action(self, action_info, context='detail'):
         """
         이미지 번역 액션 처리 - 통합 번역 방식 사용
         
         Args:
             action_info (dict): 액션 정보
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
             bool: 성공 여부
@@ -819,10 +829,13 @@ class ImageTranslationHandler:
             logger.error(f"수정사항 저장 오류: {e}")
             return False
     
-    def _open_bulk_edit_modal(self):
+    def _open_bulk_edit_modal(self, context='detail'):
         """
         일괄편집 모달창 열기 - PercentyImageManager3 사용 (H열과 동일한 방식)
         
+        Args:
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
         Returns:
             bool: 성공 여부
         """
@@ -884,6 +897,218 @@ class ImageTranslationHandler:
         except Exception as e:
             logger.error(f"일괄편집 모달창 열기 오류: {e}")
             return False
+            
+    def _open_direct_edit_modal(self, context):
+        """
+        썸네일/옵션 탭에서 직접 편집하기 버튼 클릭하여 이미지 번역 모달 열기
+        
+        Args:
+            context (str): 처리 컨텍스트 ('thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info(f"{context} 탭에서 직접 편집하기 버튼 클릭 시작")
+            
+            # 편집 버튼 선택자 설정 (컨텍스트별)
+            if context == 'thumbnail':
+                # 썸네일 탭의 편집하기 버튼
+                edit_button_selectors = [
+                    "(//div[contains(@class, 'sc-kTbCBX') and contains(@class, 'sc-eDPEul')]//span[text()='편집하기'])[1]",
+                    "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                    "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                    "(//span[text()='편집하기'])[1]",
+                    "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
+                    "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                    "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                    "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]"
+                ]
+            elif context == 'option':
+                # 옵션 탭의 편집하기 버튼
+                edit_button_selectors = [
+                    "(//div[contains(@class, 'sc-kTbCBX') and contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[1]",
+                    "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                    "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                    "(//span[text()='편집하기'])[1]",
+                    "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
+                    "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                    "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                    "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]"
+                ]
+            else:
+                logger.error(f"지원되지 않는 컨텍스트: {context}")
+                return False
+            
+            for selector in edit_button_selectors:
+                try:
+                    edit_btn = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    
+                    # 스크롤하여 요소가 보이도록 함
+                    self.driver.execute_script("arguments[0].scrollIntoView(true);", edit_btn)
+                    time.sleep(0.2)
+                    
+                    # 클릭 시도
+                    try:
+                        edit_btn.click()
+                        logger.info(f"{context} 탭 편집하기 버튼 클릭 성공 (일반 클릭): {selector}")
+                    except Exception:
+                        # JavaScript 클릭 시도
+                        self.driver.execute_script("arguments[0].click();", edit_btn)
+                        logger.info(f"{context} 탭 편집하기 버튼 클릭 성공 (JavaScript 클릭): {selector}")
+                    
+                    # 이미지 번역 모달창이 열릴 때까지 대기
+                    self.human_delay.medium_delay()
+                    
+                    # 이미지 번역 모달창 확인
+                    modal_selectors = [
+                        "//div[contains(@class, 'ant-modal')]//span[contains(text(), '이미지 번역')]",
+                        "//div[contains(@class, 'ant-drawer')]//span[contains(text(), '이미지 번역')]",
+                        "//div[contains(@class, 'ant-modal-title') and contains(text(), '이미지 번역')]",
+                        "//div[contains(@class, 'ant-drawer-title') and contains(text(), '이미지 번역')]",
+                        "//button[contains(text(), '원클릭 이미지 번역')]",
+                        "#pCanvas",
+                        "canvas[id='pCanvas']",
+                        "//canvas[@id='pCanvas']"
+                    ]
+                    
+                    modal_opened = False
+                    for modal_selector in modal_selectors:
+                        try:
+                            if modal_selector.startswith('//'):
+                                # XPath 선택자
+                                element = self.driver.find_element(By.XPATH, modal_selector)
+                            else:
+                                # CSS 선택자
+                                element = self.driver.find_element(By.CSS_SELECTOR, modal_selector)
+                                
+                            if element and element.is_displayed():
+                                logger.info(f"{context} 탭 이미지 번역 모달창 열림 확인: {modal_selector}")
+                                modal_opened = True
+                                break
+                        except Exception:
+                            continue
+                    
+                    if modal_opened:
+                        logger.info(f"{context} 탭 이미지 번역 모달창이 성공적으로 열렸습니다.")
+                        return True
+                    else:
+                        logger.warning(f"{context} 탭 이미지 번역 모달창이 열리지 않았습니다.")
+                        continue
+                        
+                except Exception as e:
+                    logger.debug(f"{context} 탭 편집 버튼 선택자 {selector} 실패: {e}")
+                    continue
+            
+            logger.error(f"{context} 탭에서 편집하기 버튼을 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            logger.error(f"{context} 탭 직접 편집 모달 열기 오류: {e}")
+            return False
+            
+    def _click_first_image_bulk_edit_button(self, context='detail'):
+        """
+        첫 번째 이미지의 일괄편집 버튼 클릭
+        
+        Args:
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info(f"{context} 컨텍스트에서 첫 번째 이미지 일괄편집 버튼 클릭 시작")
+            
+            # 컨텍스트별 편집 버튼 선택자 가져오기
+            edit_button_selectors = self._get_edit_button_selectors(context)
+            
+            for selector in edit_button_selectors:
+                try:
+                    edit_btn = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    
+                    # 스크롤하여 요소가 보이도록 함
+                    self.driver.execute_script("arguments[0].scrollIntoView(true);", edit_btn)
+                    time.sleep(0.2)
+                    
+                    # 클릭 시도
+                    try:
+                        edit_btn.click()
+                        logger.info(f"{context} 컨텍스트 첫 번째 이미지 일괄편집 버튼 클릭 성공 (일반 클릭): {selector}")
+                    except Exception:
+                        # JavaScript 클릭 시도
+                        self.driver.execute_script("arguments[0].click();", edit_btn)
+                        logger.info(f"{context} 컨텍스트 첫 번째 이미지 일괄편집 버튼 클릭 성공 (JavaScript 클릭): {selector}")
+                    
+                    # 클릭 후 잠시 대기
+                    self.human_delay.short_delay()
+                    return True
+                    
+                except Exception as e:
+                    logger.debug(f"{context} 컨텍스트 편집 버튼 선택자 {selector} 실패: {e}")
+                    continue
+            
+            logger.error(f"{context} 컨텍스트에서 첫 번째 이미지 일괄편집 버튼을 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            logger.error(f"{context} 컨텍스트 첫 번째 이미지 일괄편집 버튼 클릭 오류: {e}")
+            return False
+            
+    def _get_edit_button_selectors(self, context='detail'):
+        """
+        컨텍스트별 편집 버튼 선택자 반환
+        
+        Args:
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            list: 편집 버튼 선택자 리스트
+        """
+        if context == 'detail':
+            # 상세페이지 탭의 일괄편집 버튼
+            return [
+                "(//div[contains(@class, 'sc-kTbCBX') and contains(@class, 'sc-eDPEul')]//span[text()='일괄편집'])[1]",
+                "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='일괄편집'])[1]",
+                "(//span[contains(@class, 'FootnoteDescription') and text()='일괄편집'])[1]",
+                "(//span[text()='일괄편집'])[1]",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]"
+            ]
+        elif context == 'thumbnail':
+            # 썸네일 탭의 편집하기 버튼
+            return [
+                "(//div[contains(@class, 'sc-kTbCBX') and contains(@class, 'sc-eDPEul')]//span[text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                "(//span[text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]"
+            ]
+        elif context == 'option':
+            # 옵션 탭의 편집하기 버튼
+            return [
+                "(//div[contains(@class, 'sc-kTbCBX') and contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                "(//span[text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]"
+            ]
+        else:
+            # 정의되지 않은 컨텍스트의 경우 detail 컨텍스트 선택자 사용
+            logger.warning(f"정의되지 않은 컨텍스트 '{context}', detail 컨텍스트 선택자 사용")
+            return self._get_edit_button_selectors('detail')
     
     def _close_bulk_edit_modal(self):
         """

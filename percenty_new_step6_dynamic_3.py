@@ -39,7 +39,7 @@ def main():
         # 순환 임포트 문제 해결을 위해 동적 임포트 사용
         from login_percenty import PercentyLogin
         from account_manager import AccountManager
-        from product_editor_core6_1_dynamic import ProductEditorCore6_1Dynamic
+        from product_editor_core6_dynamic_3 import ProductEditorCore6_Dynamic3
         
         # 1. 계정 관리자 초기화
         print("\n1. 계정 관리자 초기화...")
@@ -98,7 +98,7 @@ def main():
         print("\n9. 동적 업로드 코어 초기화...")
         account_id = selected_account.get('id', selected_account.get('nickname', 'unknown'))
         print(f"   계정 ID: {account_id}")
-        dynamic_core = ProductEditorCore6_1Dynamic(login.driver, account_id)
+        dynamic_core = ProductEditorCore6_Dynamic3(login.driver, account_id)
         
         # 10. 신규상품등록 화면으로 전환
         print("\n10. 신규상품등록 화면으로 전환...")
@@ -108,12 +108,14 @@ def main():
         
         print("✅ 신규상품등록 화면 전환 성공!")
         
+        """
         # 10-1. 퍼센티 확장프로그램 설치
         print("\n10-1. 퍼센티 확장프로그램 설치...")
         if not dynamic_core._install_percenty_extension():
             print("⚠️ 퍼센티 확장프로그램 설치 실패, 계속 진행합니다")
         else:
             print("✅ 퍼센티 확장프로그램 설치 성공!")
+        """
         
         # 11. 동적 업로드 워크플로우 실행
         print("\n11. 동적 업로드 워크플로우 실행...")

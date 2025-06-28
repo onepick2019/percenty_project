@@ -1,6 +1,7 @@
 import logging
 import time
 import random
+import logging
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -68,10 +69,18 @@ class ImageTranslationHandler:
         self.logger = logging.getLogger(__name__)
         self.human_delay = HumanLikeDelay()
         
-    def image_translate(self, action_value):
-        """이미지 번역 처리 메인 메서드 - 기존 액션 형식 지원 + 새로운 순차 처리"""
+    def image_translate(self, action_value, context='detail'):
+        """이미지 번역 처리 메인 메서드
+        
+        Args:
+            action_value (str): 액션 값
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
         try:
-            self.logger.info(f"이미지 번역 시작: {action_value}")
+            self.logger.info(f"이미지 번역 시작 - 액션: {action_value}, 컨텍스트: {context}")
             
             # 액션 파싱
             action_info = self._parse_image_translate_action(action_value)
@@ -79,13 +88,19 @@ class ImageTranslationHandler:
                 self.logger.error("이미지 번역 액션 파싱 실패")
                 return False
             
-            # 벌크 편집 모달 열기
-            if not self._open_bulk_edit_modal():
-                return False
+            # 컨텍스트별 모달창 열기
+            if context == 'detail':
+                # 상세페이지: 일괄편집 모달창 열기
+                if not self._open_bulk_edit_modal(context):
+                    return False
+            else:
+                # 썸네일/옵션: 바로 편집하기 버튼 클릭
+                if not self._open_direct_edit_modal(context):
+                    return False
                 
             try:
                 # 이미지 번역 액션 처리
-                success = self._process_image_translate_action(action_info)
+                success = self._process_image_translate_action(action_info, context)
                 
                 if success:
                     self.logger.info("이미지 번역 완료")
@@ -95,11 +110,12 @@ class ImageTranslationHandler:
                 return success
                 
             finally:
-                # 벌크 편집 모달 닫기
-                self._close_bulk_edit_modal()
+                # 모달 닫기 - 주석처리 (product_editor_core3에서 통합 관리)
+                # self._close_bulk_edit_modal()
+                pass
                 
         except Exception as e:
-            self.logger.error(f"이미지 번역 중 오류: {e}")
+            self.logger.error(f"이미지 번역 중 오류 - 컨텍스트: {context}, 오류: {e}")
             return False
             
     def _parse_image_translate_action(self, action_value):
@@ -195,6 +211,14 @@ class ImageTranslationHandler:
             elif pos == 'auto_detect_chinese':
                 self.logger.info("auto_detect_chinese 형식 - 중문글자 자동 감지 모드")
                 positions.append('auto_detect_chinese')
+            # "special:N" 형식인 경우 (N번째 이미지까지만 스캔)
+            elif pos.startswith('special:'):
+                try:
+                    max_position = int(pos.split(':')[1])
+                    self.logger.info(f"special 형식 파싱: {pos} -> 최대 {max_position}번째까지 스캔")
+                    positions.append(f'special:{max_position}')
+                except (IndexError, ValueError):
+                    self.logger.warning(f"잘못된 special 형식: {pos}")
             else:
                 self.logger.warning(f"잘못된 이미지 위치 값: {pos}")
         
@@ -210,25 +234,40 @@ class ImageTranslationHandler:
         self.logger.info(f"이미지 번역 액션 파싱 완료: {action_info}")
         return action_info
             
-    def _process_image_translate_action(self, action_info):
-        """이미지 번역 액션 처리 - 통합 방식으로 모든 케이스 처리"""
+    def _process_image_translate_action(self, action_info, context='detail'):
+        """이미지 번역 액션 처리
+        
+        Args:
+            action_info (dict): 액션 정보
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
         try:
             positions = action_info.get('positions', [])
             self.logger.info(f"이미지 번역 처리 시작 - 위치: {positions}")
+            
+            # special:N 모드인 경우 N번째까지만 스캔하여 처리
+            special_positions = [pos for pos in positions if isinstance(pos, str) and pos.startswith('special:')]
+            if special_positions:
+                max_position = int(special_positions[0].split(':')[1])
+                self.logger.info(f"special 모드 실행: 최대 {max_position}번째 이미지까지 스캔")
+                return self._process_all_images_sequentially_with_limit(max_position, context)
             
             # auto_detect_chinese 모드인 경우 중문글자 감지 후 통합 처리
             if 'auto_detect_chinese' in positions:
                 self.logger.info("중문글자 자동 감지 모드 실행")
                 # 중문글자 감지 기능은 SpecificImageTranslationHandler에서 가져와야 함
                 # 현재는 모든 이미지를 순차 처리하는 방식으로 대체
-                return self._process_all_images_sequentially()
+                return self._process_all_images_sequentially(context)
             
             # sequential_all 모드인 경우 전체 이미지 스캔 방식 사용
             if 'sequential_all' in positions:
-                return self._process_all_images_sequentially()
+                return self._process_all_images_sequentially(context)
             else:
                 # 특정 위치들은 해당 위치만 처리하는 방식 사용
-                return self._process_specific_positions_unified(positions)
+                return self._process_specific_positions_unified(positions, context)
                 
         except Exception as e:
             self.logger.error(f"이미지 번역 액션 처리 오류: {e}")
@@ -278,31 +317,140 @@ class ImageTranslationHandler:
     #         self.logger.error(f"개별 위치 처리 오류: {e}")
     #         return False
             
-    def _process_all_images_sequentially(self):
-        """모든 이미지 순차 처리 (새로운 방식) - 먼저 스캔 후 번역"""
-        try:
-            # 총 이미지 개수 확인
-            total_images = self._get_total_image_count()
-            if total_images == 0:
-                self.logger.warning("이미지가 없습니다")
-                return False
-                
-            self.logger.info(f"총 {total_images}개의 이미지 스캔 및 번역 처리 시작")
+    def _process_all_images_sequentially_with_limit(self, max_scan_position, context='detail'):
+        """제한된 위치까지만 이미지 순차 처리
+        
+        Args:
+            max_scan_position (int): 스캔할 최대 이미지 위치
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
-            # 첫 번째 편집 버튼 클릭
-            if not self._click_first_image_bulk_edit_button():
-                return False
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            if context == 'detail':
+                # 상세페이지: 일괄편집 모달창을 먼저 열고 이미지 개수 확인
+                # 첫 번째 편집 버튼 클릭
+                if not self._click_first_image_bulk_edit_button(context):
+                    return False
+                    
+                # 이미지 번역 모달 대기
+                if not self._wait_for_image_translation_modal():
+                    return False
+                    
+                # 총 이미지 개수 확인
+                total_images = self._get_total_image_count(context)
+                if total_images == 0:
+                    self.logger.warning("이미지가 없습니다")
+                    # K열(detail)의 경우 이미지가 0개여도 저장 버튼 클릭 후 모달 닫기
+                    self._save_changes()
+                    self._close_image_translation_modal()
+                    return True
+            else:
+                # 썸네일/옵션 탭: 해당 탭에서 먼저 이미지 개수 확인 후 편집하기 버튼 클릭
+                # 먼저 해당 탭에서 이미지 개수 확인 (모달창 열기 전)
+                total_images = self._get_tab_image_count(context)
+                if total_images == 0:
+                    self.logger.warning(f"{context} 탭에 이미지가 없습니다")
+                    return False
+                    
+                self.logger.info(f"{context} 탭에서 총 {total_images}개의 이미지 발견")
                 
-            # 이미지 번역 모달 대기
-            if not self._wait_for_image_translation_modal():
-                return False
+                # 편집하기 버튼 클릭
+                if not self._click_first_image_bulk_edit_button(context):
+                    return False
+                    
+                # 이미지 번역 모달 대기
+                if not self._wait_for_image_translation_modal():
+                    return False
                 
-            # 1단계: 모든 이미지 스캔하여 번역 필요한 이미지 식별
-            images_to_translate = self._scan_all_images_for_translation(total_images)
+            # 스캔할 이미지 개수를 max_scan_position으로 제한
+            scan_images = min(total_images, max_scan_position)
+            self.logger.info(f"총 {total_images}개 중 {scan_images}개의 이미지만 스캔 및 번역 처리 시작")
+                
+            # 1단계: 제한된 이미지만 스캔하여 번역 필요한 이미지 식별
+            images_to_translate = self._scan_all_images_for_translation_with_limit(scan_images, context)
             
             if not images_to_translate:
                 self.logger.info("번역이 필요한 이미지가 없습니다")
+                # K열(detail)에서만 저장 후 모달 닫기, N열/O열에서는 모달만 닫기
+                if context == 'detail':
+                    self._save_changes()
                 self._close_image_translation_modal()
+                return True
+                
+            # 2단계: 식별된 이미지들만 번역 처리
+            processed_count = self._process_specific_images_for_translation(images_to_translate)
+            
+            # 변경사항 저장
+            self._save_changes()
+            
+            # 모달 닫기
+            self._close_image_translation_modal()
+            
+            self.logger.info(f"제한된 이미지 순차 처리 완료: {processed_count}/{len(images_to_translate)}개 성공")
+            return processed_count > 0
+            
+        except Exception as e:
+            self.logger.error(f"제한된 이미지 순차 처리 오류: {e}")
+            return False
+    
+    def _process_all_images_sequentially(self, context='detail'):
+        """모든 이미지 순차 처리
+        
+        Args:
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            if context == 'detail':
+                # 상세페이지: 일괄편집 모달창을 먼저 열고 이미지 개수 확인
+                # 첫 번째 편집 버튼 클릭
+                if not self._click_first_image_bulk_edit_button(context):
+                    return False
+                    
+                # 이미지 번역 모달 대기
+                if not self._wait_for_image_translation_modal():
+                    return False
+                    
+                # 총 이미지 개수 확인
+                total_images = self._get_total_image_count(context)
+                if total_images == 0:
+                    self.logger.warning("이미지가 없습니다")
+                    return False
+            else:
+                # 썸네일/옵션 탭: 해당 탭에서 먼저 이미지 개수 확인 후 편집하기 버튼 클릭
+                # 먼저 해당 탭에서 이미지 개수 확인 (모달창 열기 전)
+                total_images = self._get_tab_image_count(context)
+                if total_images == 0:
+                    self.logger.warning(f"{context} 탭에 이미지가 없습니다")
+                    return False
+                    
+                self.logger.info(f"{context} 탭에서 총 {total_images}개의 이미지 발견")
+                
+                # 편집하기 버튼 클릭
+                if not self._click_first_image_bulk_edit_button(context):
+                    return False
+                    
+                # 이미지 번역 모달 대기
+                if not self._wait_for_image_translation_modal():
+                    return False
+                
+            self.logger.info(f"총 {total_images}개의 이미지 스캔 및 번역 처리 시작")
+                
+            # 1단계: 모든 이미지 스캔하여 번역 필요한 이미지 식별
+            images_to_translate = self._scan_all_images_for_translation(total_images, context)
+            
+            if not images_to_translate:
+                self.logger.info("번역이 필요한 이미지가 없습니다")
+                # K열(detail)에서만 저장 후 모달 닫기, N열/O열에서는 모달만 닫기
+                if context == 'detail':
+                    self._save_changes()
+                    self._close_image_translation_modal()
+                else:
+                    self._close_image_translation_modal()
                 return True
                 
             self.logger.info(f"번역 대상 이미지: specific:{','.join(map(str, images_to_translate))}")
@@ -314,20 +462,29 @@ class ImageTranslationHandler:
             if processed_count > 0:
                 self._save_changes()
             
-            # 모달 닫기
-            self._close_image_translation_modal()
+            # 모달 닫기 - 썸네일/옵션 탭에서는 모달을 열어둠 (다른 탭 처리를 위해)
+            if context == 'detail':
+                self._close_image_translation_modal()
             
-            self.logger.info(f"스캔 및 번역 처리 완료: {processed_count}/{len(images_to_translate)}개 처리됨")
+            self.logger.info(f"스캔 및 번역 처리 완료: {processed_count}/{len(images_to_translate)}개 처리됨 - 컨텍스트: {context}")
             return processed_count > 0
             
         except Exception as e:
-            self.logger.error(f"스캔 및 번역 처리 오류: {e}")
+            self.logger.error(f"스캔 및 번역 처리 오류 - 컨텍스트: {context}, 오류: {e}")
             return False
             
-    def _process_specific_positions_unified(self, positions):
-        """특정 위치 이미지만 처리하는 통합 방식"""
+    def _process_specific_positions_unified(self, positions, context='detail'):
+        """특정 위치 이미지만 처리하는 통합 방식
+        
+        Args:
+            positions (list): 이미지 위치 리스트
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
         try:
-            self.logger.info(f"특정 위치 이미지 번역 처리 시작 - 위치: {positions}")
+            self.logger.info(f"특정 위치 이미지 번역 처리 시작 - 위치: {positions}, 컨텍스트: {context}")
             
             # last: 형식을 실제 위치로 변환
             converted_positions = []
@@ -337,7 +494,12 @@ class ImageTranslationHandler:
                 if isinstance(pos, str) and pos.startswith('last:'):
                     # 총 이미지 개수를 아직 확인하지 않았다면 확인
                     if total_images is None:
-                        total_images = self._get_total_image_count()
+                        if context in ['thumbnail', 'option']:
+                            # 썸네일/옵션 탭의 경우 탭에서 직접 이미지 개수 확인
+                            total_images = self._get_tab_image_count(context)
+                        else:
+                            # 상세페이지의 경우 모달창에서 이미지 개수 확인
+                            total_images = self._get_total_image_count(context)
                         self.logger.info(f"총 이미지 개수 확인: {total_images}개")
                     
                     # last:숫자에서 숫자 추출
@@ -369,7 +531,7 @@ class ImageTranslationHandler:
             if not modal_already_open:
                 # 이미지 번역 모달창이 열려있지 않은 경우 첫 번째 이미지의 일괄편집 버튼 클릭
                 self.logger.info("이미지 번역 모달창이 닫혀있음 - 첫 번째 이미지 일괄편집 버튼 클릭")
-                if not self._click_first_image_bulk_edit_button():
+                if not self._click_first_image_bulk_edit_button(context):
                     self.logger.error("첫 번째 이미지 일괄편집 버튼 클릭 실패")
                     return False
                     
@@ -387,8 +549,8 @@ class ImageTranslationHandler:
             if processed_count > 0:
                 self._save_changes()
             
-            # 모달 닫기 (새로 연 경우에만)
-            if not modal_already_open:
+            # 모달 닫기 - 상세페이지에서만 닫고, 썸네일/옵션 탭에서는 열어둠
+            if not modal_already_open and context == 'detail':
                 self._close_image_translation_modal()
             
             self.logger.info(f"특정 위치 이미지 번역 처리 완료: {processed_count}/{len(converted_positions)}개 처리됨")
@@ -473,8 +635,15 @@ class ImageTranslationHandler:
             self.logger.error(f"이미지 위치 {position} 편집 버튼 클릭 오류: {e}")
             return False
             
-    def _open_bulk_edit_modal(self):
-        """벌크 편집 모달 열기"""
+    def _open_bulk_edit_modal(self, context='detail'):
+        """벌크 편집 모달 열기
+        
+        Args:
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
         try:
             self.logger.info("상세페이지 일괄편집 모달창 열기 시작")
             
@@ -530,70 +699,272 @@ class ImageTranslationHandler:
             self.logger.error(f"일괄편집 모달창 열기 오류: {e}")
             return False
             
-    def _get_total_image_count(self):
-        """총 이미지 개수 확인 - 모달창 내 cbu01.alicdn.com 이미지만 카운트"""
-        try:
-            # 먼저 모달창 요소를 찾음
-            modal_selectors = [
-                "//div[contains(@class, 'ant-drawer-content')]",
-                "//div[contains(@class, 'ant-modal-content')]",
-                "//div[contains(@class, 'ant-drawer')]",
-                "//div[contains(@class, 'ant-modal')]"
-            ]
+    def _open_direct_edit_modal(self, context):
+        """썸네일/옵션 탭에서 직접 편집하기 버튼 클릭하여 이미지 번역 모달 열기
+        
+        Args:
+            context (str): 처리 컨텍스트 ('thumbnail', 'option')
             
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            self.logger.info(f"{context} 탭에서 직접 편집하기 버튼 클릭 시작")
+            
+            # 편집 버튼 선택자 가져오기
+            edit_button_selectors = self._get_edit_button_selectors(context)
+            
+            for selector in edit_button_selectors:
+                try:
+                    edit_btn = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    
+                    # 스크롤하여 요소가 보이도록 함
+                    self.driver.execute_script("arguments[0].scrollIntoView(true);", edit_btn)
+                    time.sleep(0.2)
+                    
+                    # 클릭 시도
+                    try:
+                        edit_btn.click()
+                        self.logger.info(f"{context} 탭 편집하기 버튼 클릭 성공 (일반 클릭): {selector}")
+                    except Exception:
+                        # JavaScript 클릭 시도
+                        self.driver.execute_script("arguments[0].click();", edit_btn)
+                        self.logger.info(f"{context} 탭 편집하기 버튼 클릭 성공 (JavaScript 클릭): {selector}")
+                    
+                    # 이미지 번역 모달창이 열릴 때까지 대기
+                    self.human_delay.medium_delay()
+                    
+                    # 이미지 번역 모달창 확인
+                    if self._wait_for_image_translation_modal():
+                        self.logger.info(f"{context} 탭 이미지 번역 모달창이 성공적으로 열렸습니다.")
+                        return True
+                    else:
+                        self.logger.warning(f"{context} 탭 이미지 번역 모달창이 열리지 않았습니다.")
+                        continue
+                        
+                except TimeoutException:
+                    self.logger.debug(f"{context} 탭 편집 버튼 선택자 {selector} 시간 초과")
+                    continue
+                except Exception as e:
+                    self.logger.debug(f"{context} 탭 편집 버튼 선택자 {selector} 실패: {e}")
+                    continue
+            
+            self.logger.error(f"{context} 탭에서 편집하기 버튼을 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"{context} 탭 직접 편집 모달 열기 오류: {e}")
+            return False
+            
+    def _get_total_image_count(self, context='detail'):
+        """총 이미지 개수 확인 - 컨텍스트별 모달창 내 cbu01.alicdn.com 이미지만 카운트
+        
+        Args:
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            int: 이미지 개수
+        """
+        try:
+            self.logger.info(f"[{context}] 총 이미지 개수 확인 시작")
+            
+            # 컨텍스트별 모달창 요소 찾기
             modal_element = None
+            
+            if context == 'detail':
+                # 상세페이지 일괄편집 모달창
+                modal_selectors = [
+                    "//div[contains(@class, 'ant-drawer-content')]",
+                    "//div[contains(@class, 'ant-modal-content')]",
+                    "//div[contains(@class, 'ant-drawer')]",
+                    "//div[contains(@class, 'ant-modal')]"
+                ]
+            else:
+                # 썸네일/옵션 탭의 이미지 번역 모달창
+                modal_selectors = [
+                    "//div[contains(@class, 'ant-drawer')]//span[contains(text(), '이미지 번역')]/ancestor::div[contains(@class, 'ant-drawer')]",
+                    "//div[contains(@class, 'ant-modal')]//span[contains(text(), '이미지 번역')]/ancestor::div[contains(@class, 'ant-modal')]",
+                    "//div[contains(@class, 'ant-drawer-content')]",
+                    "//div[contains(@class, 'ant-modal-content')]",
+                    "//div[contains(@class, 'ant-drawer')]",
+                    "//div[contains(@class, 'ant-modal')]"
+                ]
+            
             for modal_selector in modal_selectors:
                 try:
                     modal_element = self.driver.find_element(By.XPATH, modal_selector)
                     if modal_element:
-                        self.logger.info(f"모달창 요소 발견: {modal_selector}")
+                        self.logger.info(f"[{context}] 모달창 요소 발견: {modal_selector}")
                         break
                 except Exception:
                     continue
             
             if not modal_element:
-                self.logger.warning("모달창을 찾을 수 없습니다")
+                self.logger.warning(f"[{context}] 모달창을 찾을 수 없습니다")
                 return 0
                 
-            # 모달창 내에서만 이미지 검색
-            # 사용자 제공 DOM 구조: <div class="sc-hMxIkD byPQOP"><span><img class="sc-eSoiBi ipHRUV p_tooltip_image_editor_thumb" src="https://cbu01.alicdn.com/img/..."
-            selectors = [
-                # 컨테이너 div 기반 선택자 (사용자 제공 DOM 구조)
-                ".//div[contains(@class, 'sc-hMxIkD') and contains(@class, 'byPQOP')]//img[contains(@class, 'p_tooltip_image_editor_thumb')]",
-                ".//div[contains(@class, 'sc-hMxIkD')]//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb')]",
-                # 가장 구체적인 이미지 선택자
-                ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')]",
-                # 클래스 조합 선택자
-                ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')]",
-                # 기존 선택자들 (호환성 유지)
-                ".//img[contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'https://cbu01.alicdn.com/img')]",
-                ".//img[contains(@src, 'https://cbu01.alicdn.com/img')]"
-            ]
+            # 컨텍스트별 이미지 선택자 설정
+            if context in ['thumbnail', 'option']:
+                # 썸네일/옵션 탭의 이미지 번역 모달창 내 이미지
+                selectors = [
+                    # 이미지 번역 모달창 내 특정 이미지 선택자
+                    ".//div[contains(@class, 'sc-hMxIkD') and contains(@class, 'byPQOP')]//img[contains(@class, 'p_tooltip_image_editor_thumb')]",
+                    ".//div[contains(@class, 'sc-hMxIkD')]//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb')]",
+                    ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')]",
+                    ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'cbu01.alicdn.com')]",
+                    ".//img[contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'https://cbu01.alicdn.com/img')]",
+                    ".//img[contains(@src, 'https://cbu01.alicdn.com/img')]",
+                    # 추가 선택자 (이미지 번역 모달창 특화)
+                    ".//div[contains(@class, 'image-container')]//img[contains(@src, 'cbu01.alicdn.com')]",
+                    ".//div[contains(@class, 'ant-image')]//img[contains(@src, 'cbu01.alicdn.com')]"
+                ]
+            else:
+                # 상세페이지 일괄편집 모달창 내 이미지
+                selectors = [
+                    # 컨테이너 div 기반 선택자 (사용자 제공 DOM 구조)
+                    ".//div[contains(@class, 'sc-hMxIkD') and contains(@class, 'byPQOP')]//img[contains(@class, 'p_tooltip_image_editor_thumb')]",
+                    ".//div[contains(@class, 'sc-hMxIkD')]//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb')]",
+                    # 가장 구체적인 이미지 선택자
+                    ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'ipHRUV') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'alicdn.com')]",
+                    # 클래스 조합 선택자
+                    ".//img[contains(@class, 'sc-eSoiBi') and contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'alicdn.com')]",
+                    # 기존 선택자들 (호환성 유지)
+                    ".//img[contains(@class, 'p_tooltip_image_editor_thumb') and contains(@src, 'alicdn.com')]",
+                    ".//img[contains(@src, 'alicdn.com')]"                    
+                ]
             
             for selector in selectors:
                 try:
                     # 모달창 내에서만 이미지 검색
                     images = modal_element.find_elements(By.XPATH, selector)
                     if images:
-                        # cbu01.alicdn.com으로 시작하는 이미지만 필터링
+                        # alicdn.com을 포함하는 이미지만 필터링 (cbu01.alicdn.com 및 img.alicdn.com 모두 지원)
                         valid_images = []
                         for img in images:
                             src = img.get_attribute('src')
-                            if src and 'https://cbu01.alicdn.com/img' in src:
+                            if src and 'alicdn.com' in src:
                                 valid_images.append(img)
                         
                         if valid_images:
-                            self.logger.info(f"모달창 내 유효한 이미지 {len(valid_images)}개 발견 (선택자: {selector})")
+                            self.logger.info(f"[{context}] 모달창 내 유효한 이미지 {len(valid_images)}개 발견 (선택자: {selector})")
                             return len(valid_images)
                 except Exception as e:
-                    self.logger.debug(f"모달창 내 이미지 선택자 {selector} 실패: {e}")
+                    self.logger.debug(f"[{context}] 모달창 내 이미지 선택자 {selector} 실패: {e}")
                     continue
                     
-            self.logger.warning("모달창 내 유효한 이미지를 찾을 수 없습니다")
+            self.logger.warning(f"[{context}] 모달창 내 유효한 이미지를 찾을 수 없습니다")
             return 0
             
         except Exception as e:
-            self.logger.error(f"이미지 개수 확인 실패: {e}")
+            self.logger.error(f"[{context}] 이미지 개수 확인 실패: {e}")
+            return 0
+            
+    def _get_tab_image_count(self, context):
+        """탭에서 이미지 개수 확인 - 모달창 열기 전 해당 탭의 이미지 개수 파악
+        
+        Args:
+            context (str): 처리 컨텍스트 ('thumbnail', 'option')
+            
+        Returns:
+            int: 이미지 개수
+        """
+        try:
+            self.logger.info(f"[{context}] 탭에서 이미지 개수 확인 시작")
+            
+            # 컨텍스트별 탭 이미지 선택자 설정
+            if context == 'thumbnail':
+                # 썸네일 탭의 이미지 선택자 (image_utils3.py의 get_total_thumbnail_count 기반)
+                selectors = [
+                    # 썸네일 업로드 리스트 아이템
+                    "//div[contains(@class, 'ant-upload-list-item') and not(contains(@class, 'ant-upload-list-item-uploading'))]",
+                    "//div[contains(@class, 'ant-upload-list-item-done')]",
+                    "//div[contains(@class, 'thumbnail-item')]",
+                    "//img[contains(@class, 'thumbnail')]",
+                    "//div[contains(@class, 'ant-upload-list')]//div[contains(@class, 'ant-upload-list-item')]",
+                    "//div[@class='ant-upload-list ant-upload-list-picture-card']//div[contains(@class, 'ant-upload-list-item')]"
+                ]
+            elif context == 'option':
+                # 옵션 탭의 이미지 선택자 (실제 DOM 구조 기반)
+                selectors = [
+                    # 옵션 탭의 이미지 컨테이너 (sc-TOgAA dFMQoJ 클래스)
+                    "//div[contains(@class, 'sc-TOgAA') and contains(@class, 'dFMQoJ')]",
+                    "//div[contains(@class, 'sc-TOgAA dFMQoJ')]",
+                    # 백업 선택자들
+                    "//div[contains(@class, 'ant-upload-list-item') and not(contains(@class, 'ant-upload-list-item-uploading'))]",
+                    "//div[contains(@class, 'ant-upload-list-item-done')]",
+                    "//div[contains(@class, 'option-image-item')]",
+                    "//img[contains(@class, 'option-image')]",
+                    # 일반적인 업로드 리스트 아이템
+                    "//div[contains(@class, 'ant-upload-list')]//div[contains(@class, 'ant-upload-list-item')]",
+                    "//div[@class='ant-upload-list ant-upload-list-picture-card']//div[contains(@class, 'ant-upload-list-item')]"
+                ]
+            else:
+                self.logger.warning(f"지원하지 않는 컨텍스트: {context}")
+                return 0
+            
+            # 썸네일 탭의 경우 텍스트에서 개수 추출 시도
+            if context == 'thumbnail':
+                try:
+                    # '총 X개 썸네일' 텍스트에서 개수 추출
+                    count_selectors = [
+                        "//span[contains(text(), '총') and contains(text(), '개 썸네일')]",
+                        "//div[contains(text(), '총') and contains(text(), '개 썸네일')]",
+                        "//p[contains(text(), '총') and contains(text(), '개 썸네일')]",
+                        "//span[contains(text(), '썸네일') and contains(text(), '개')]",
+                        "//div[contains(text(), '썸네일') and contains(text(), '개')]"
+                    ]
+                    
+                    for count_selector in count_selectors:
+                        try:
+                            element = self.driver.find_element(By.XPATH, count_selector)
+                            text = element.text
+                            self.logger.info(f"[{context}] 썸네일 개수 텍스트 발견: {text}")
+                            
+                            # 정규식으로 숫자 추출
+                            import re
+                            patterns = [
+                                r'총\s*(\d+)\s*개\s*썸네일',
+                                r'(\d+)\s*개\s*썸네일',
+                                r'썸네일\s*(\d+)\s*개',
+                                r'(\d+)\s*개'
+                            ]
+                            
+                            for pattern in patterns:
+                                match = re.search(pattern, text)
+                                if match:
+                                    count = int(match.group(1))
+                                    self.logger.info(f"[{context}] 탭에서 텍스트로 이미지 개수 확인: {count}개")
+                                    return count
+                        except Exception as e:
+                            self.logger.debug(f"[{context}] 썸네일 개수 텍스트 선택자 실패: {e}")
+                            continue
+                except Exception as e:
+                    self.logger.debug(f"[{context}] 텍스트 기반 개수 확인 실패: {e}")
+            
+            # 요소 개수로 확인
+            for selector in selectors:
+                try:
+                    # 탭에서 이미지/요소 검색
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    if elements:
+                        # 표시되는 요소만 카운트
+                        visible_elements = [elem for elem in elements if elem.is_displayed()]
+                        count = len(visible_elements)
+                        
+                        if count > 0:
+                            self.logger.info(f"[{context}] 탭에서 요소 개수로 이미지 {count}개 발견 (선택자: {selector})")
+                            return count
+                except Exception as e:
+                    self.logger.debug(f"[{context}] 탭 이미지 선택자 {selector} 실패: {e}")
+                    continue
+                    
+            self.logger.warning(f"[{context}] 탭에서 유효한 이미지를 찾을 수 없습니다")
+            return 0
+            
+        except Exception as e:
+            self.logger.error(f"[{context}] 탭 이미지 개수 확인 실패: {e}")
             return 0
             
     # def _click_first_edit_button(self):
@@ -637,10 +1008,17 @@ class ImageTranslationHandler:
     #         self.logger.error(f"첫 번째 편집 버튼 클릭 실패: {e}")
     #         return False
             
-    def _click_first_image_bulk_edit_button(self):
-        """첫 번째 이미지 컨테이너의 일괄편집 버튼 클릭하여 이미지 번역 모달창 열기"""
+    def _click_first_image_bulk_edit_button(self, context='detail'):
+        """첫 번째 이미지 컨테이너의 편집 버튼 클릭
+        
+        Args:
+            context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            bool: 성공 여부
+        """
         try:
-            self.logger.info("첫 번째 이미지 컨테이너의 일괄편집 버튼 클릭 시도")
+            self.logger.info("첫 번째 이미지 컨테이너의 편집 버튼 클릭 시도")
             
             # 먼저 현재 페이지에서 편집 관련 버튼들을 찾아보기
             try:
@@ -659,28 +1037,8 @@ class ImageTranslationHandler:
             except Exception as e:
                 self.logger.debug(f"편집 버튼 전체 검색 실패: {e}")
             
-            # 첫 번째 이미지 컨테이너의 편집 버튼 선택자들 (주석처리된 안정적인 선택자 적용)
-            edit_button_selectors = [
-                # 주석처리된 코드에서 가져온 안정적인 선택자들 (첫 번째 이미지용)
-                "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
-                "(//div[contains(@class, 'sc-kTbCBX') or contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[1]",
-                "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
-                "(//span[text()='편집하기'])[1]",
-                # 현재 DOM 구조에 맞는 추가 선택자들
-                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH') and contains(@class, 'hDwhsl')]",
-                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]//span[contains(text(), '편집하기')]/parent::div",
-                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
-                # 이미지와 연관된 편집하기 버튼
-                "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
-                "(//img[contains(@class, 'iNuYXT')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
-                # 편집 아이콘과 텍스트가 있는 div
-                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
-                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
-                # 기존 일괄편집 버튼도 유지 (호환성)
-                "(//button[contains(text(), '일괄편집')])[1]",
-                "(//span[contains(text(), '일괄편집')])[1]/parent::button",
-                "//div[contains(@class, 'ant-drawer-body')]//button[contains(text(), '일괄편집')][1]"
-            ]
+            # 편집 버튼 선택자 설정 (컨텍스트별)
+            edit_button_selectors = self._get_edit_button_selectors(context)
             
             for selector in edit_button_selectors:
                 try:
@@ -1093,7 +1451,46 @@ class ImageTranslationHandler:
             self.logger.error(f"벌크 편집 모달 닫기 실패: {e}")
             return False
             
-    def _scan_all_images_for_translation(self, total_images):
+    def _scan_all_images_for_translation_with_limit(self, scan_images, context='detail'):
+        """제한된 개수의 이미지를 스캔하여 번역이 필요한 이미지 위치 식별
+        
+        Args:
+            scan_images (int): 스캔할 이미지 개수
+            context (str): 처리 컨텍스트
+            
+        Returns:
+            list: 번역이 필요한 이미지 위치 리스트
+        """
+        try:
+            images_to_translate = []
+            
+            self.logger.info(f"제한된 {scan_images}개 이미지 스캔 시작")
+            
+            for i in range(scan_images):
+                current_position = i + 1
+                self.logger.debug(f"이미지 {current_position}/{scan_images} 스캔 중...")
+                
+                # 현재 이미지에서 중국어 감지
+                if self._detect_chinese_in_current_image():
+                    images_to_translate.append(current_position)
+                    self.logger.info(f"이미지 {current_position}: 중국어 감지됨 - 번역 대상 추가")
+                else:
+                    self.logger.debug(f"이미지 {current_position}: 중국어 미감지 - 번역 불필요")
+                
+                # 마지막 이미지가 아니면 다음 이미지로 이동
+                if i < scan_images - 1:
+                    if not self._move_to_next_image():
+                        self.logger.warning(f"이미지 {current_position + 1}로 이동 실패 - 스캔 중단")
+                        break
+                        
+            self.logger.info(f"제한된 스캔 완료: {len(images_to_translate)}개 이미지가 번역 대상으로 식별됨")
+            return images_to_translate
+            
+        except Exception as e:
+            self.logger.error(f"제한된 이미지 스캔 오류: {e}")
+            return []
+    
+    def _scan_all_images_for_translation(self, total_images, context='detail'):
         """모든 이미지를 스캔하여 번역이 필요한 이미지 위치 식별"""
         try:
             images_to_translate = []
@@ -1283,3 +1680,58 @@ class ImageTranslationHandler:
         except Exception as e:
             self.logger.error(f"이미지 번역 실행 오류: {e}")
             return False
+            
+    def _get_edit_button_selectors(self, context='detail'):
+        """컨텍스트별 편집 버튼 선택자 반환
+        
+        Args:
+            context (str): 컨텍스트 ('detail', 'thumbnail', 'option')
+            
+        Returns:
+            list: 선택자 리스트
+        """
+        if context == 'detail':
+            # 상세페이지 일괄편집 모달창의 편집하기 버튼
+            return [
+                "(//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-kTbCBX') or contains(@class, 'sc-gkKZNe')]//span[text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-kTbCBX')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                "(//span[text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH') and contains(@class, 'hDwhsl')]",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]//span[contains(text(), '편집하기')]/parent::div",
+                "(//div[contains(@class, 'sc-fInFcU')])[1]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//img[contains(@class, 'sc-hCrRFl')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//img[contains(@class, 'iNuYXT')])[1]/ancestor::div[contains(@class, 'sc-fInFcU')]//div[contains(@class, 'sc-bOTbmH')]",
+                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bOTbmH')]",
+                "(//button[contains(text(), '일괄편집')])[1]",
+                "(//span[contains(text(), '일괄편집')])[1]/parent::button",
+                "//div[contains(@class, 'ant-drawer-body')]//button[contains(text(), '일괄편집')][1]"
+            ]
+        elif context == 'thumbnail':
+            # 썸네일 탭의 편집하기 버튼 (sc-leQnM jxFFxk 클래스 사용)
+            return [
+                "(//div[contains(@class, 'sc-leQnM') and contains(@class, 'jxFFxk')]//span[contains(@class, 'FootnoteDescription') and text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-leQnM')]//span[text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-fedTIj')]//div[contains(@class, 'sc-leQnM')])[1]",
+                "(//span[contains(@class, 'sc-doohEh') and contains(@class, 'imNntt') and text()='편집하기'])[1]",
+                "(//div[contains(@class, 'sc-leQnM')])[1]",
+                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-leQnM')]",
+                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-leQnM')]",
+                "(//span[text()='편집하기'])[1]"
+            ]
+        elif context == 'option':
+            # 옵션 탭의 편집 버튼 (sc-bCMFDn bQabSr 클래스 사용, 텍스트는 '편집')
+            return [
+                "(//div[contains(@class, 'sc-bCMFDn') and contains(@class, 'bQabSr')]//span[contains(@class, 'FootnoteDescription') and text()='편집'])[1]",
+                "(//div[contains(@class, 'sc-bCMFDn')]//span[text()='편집'])[1]",
+                "(//div[contains(@class, 'sc-TOgAA')]//div[contains(@class, 'sc-bCMFDn')])[1]",
+                "(//span[contains(@class, 'sc-gvXfzc') and contains(@class, 'gRVtrK') and text()='편집'])[1]",
+                "(//div[contains(@class, 'sc-bCMFDn')])[1]",
+                "(//span[@aria-label='edit' and contains(@class, 'anticon-edit')])[1]/ancestor::div[contains(@class, 'sc-bCMFDn')]",
+                "(//svg[@data-icon='edit'])[1]/ancestor::div[contains(@class, 'sc-bCMFDn')]",
+                "(//span[text()='편집'])[1]"
+            ]
+        else:
+            # 기본값 (detail과 동일)
+            return self._get_edit_button_selectors('detail')

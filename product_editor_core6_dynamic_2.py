@@ -21,10 +21,11 @@ from upload_utils import UploadUtils
 from market_manager import MarketManager
 from market_utils import MarketUtils
 from market_manager_cafe24 import MarketManagerCafe24
+from market_manager_coupang import CoupangMarketManager
 
 logger = logging.getLogger(__name__)
 
-class ProductEditorCore6_1Dynamic:
+class ProductEditorCore6_Dynamic2:
     """6-1단계 동적 업로드 처리 코어 클래스"""
     
     def __init__(self, driver, account_id, excel_path="percenty_id.xlsx"):
@@ -42,7 +43,7 @@ class ProductEditorCore6_1Dynamic:
         # 스마트스토어 API 키 설정 상태 추적
         self.smartstore_api_configured = False
         
-        logger.info(f"ProductEditorCore6_1Dynamic 초기화 완료 - 계정: {account_id}")
+        logger.info(f"ProductEditorCore6_Dynamic2 초기화 완료 - 계정: {account_id}")
     
     def load_market_config_from_excel(self):
         """
@@ -166,6 +167,23 @@ class ProductEditorCore6_1Dynamic:
             # 현재 마켓 설정 정보 저장 (다른 메서드에서 사용하기 위해)
             self.current_market_config = market_config
             
+            # 0. 쿠팡 API 연동업체를 '퍼센티'로 변경
+            coupang_id = market_config.get('coupang_id', '')
+            coupang_password = market_config.get('coupang_password', '')
+            
+            if coupang_id and coupang_password:
+                logger.info("쿠팡 API 연동업체를 '퍼센티'로 변경 시작")
+                try:
+                    coupang_manager = CoupangMarketManager(self.driver, self.wait)
+                    if coupang_manager.change_api_integrator_to_percenty(market_config):
+                        logger.info("쿠팡 API 연동업체를 '퍼센티'로 변경 완료")
+                    else:
+                        logger.warning("쿠팡 API 연동업체 '퍼센티' 변경에 실패했지만 계속 진행합니다")
+                except Exception as e:
+                    logger.error(f"쿠팡 API 연동업체 변경 중 오류 발생: {str(e)}")
+            else:
+                logger.info("쿠팡 로그인 정보가 없어 연동업체 변경을 건너뜁니다")
+            
             # 1. 마켓설정 화면 열기
             if not self._open_market_settings():
                 logger.error("마켓설정 화면 열기 실패")
@@ -205,7 +223,7 @@ class ProductEditorCore6_1Dynamic:
             else:
                 logger.info("톡스토어 API 키 또는 URL이 없어서 입력을 건너뜁니다.")
             
-            # 11번가-글로벌 API 키 입력
+            # 3-3. 11번가-글로벌 API 키 입력
             global_11st_api_key = market_config.get('11global_api', '')
             logger.info(f"11번가-글로벌 API 키 확인: {global_11st_api_key[:10] if global_11st_api_key else 'N/A'}...")
             
@@ -219,7 +237,7 @@ class ProductEditorCore6_1Dynamic:
             else:
                 logger.info("11번가-글로벌 API 키가 없어서 입력을 건너뜁니다.")
             
-            # 옥션/G마켓 API 키 입력
+            # 3-4. 옥션/G마켓 API 키 입력
             auction_api_key = market_config.get('auction_id', '')
             gmarket_api_key = market_config.get('gmarket_id', '')
             logger.info(f"옥션/G마켓 API 키 확인: 옥션={auction_api_key[:10] if auction_api_key else 'N/A'}..., G마켓={gmarket_api_key[:10] if gmarket_api_key else 'N/A'}...")
@@ -234,7 +252,7 @@ class ProductEditorCore6_1Dynamic:
             else:
                 logger.info("옥션/G마켓 API 키가 없어서 입력을 건너뜁니다.")
             
-            # 스마트스토어 API 키 입력
+            # 3-5. 스마트스토어 API 키 입력
             smartstore_api_key = market_config.get('smartstore_api', '')
             logger.info(f"스마트스토어 API 키 확인: {smartstore_api_key[:10] if smartstore_api_key else 'N/A'}...")
             
@@ -250,7 +268,7 @@ class ProductEditorCore6_1Dynamic:
                 logger.info("스마트스토어 API 키가 없어서 입력을 건너뜁니다.")
                 self.smartstore_api_configured = False  # 스마트스토어 API 키 미설정 표시
             
-            # 쿠팡 API 키 입력
+            # 3-6. 쿠팡 API 키 입력
             coupang_id = market_config.get('coupang_id', '')
             coupang_code = market_config.get('coupang_code', '')
             coupang_access = market_config.get('coupang_access', '')
@@ -1408,12 +1426,14 @@ class ProductEditorCore6_1Dynamic:
             logger.error(f"동적 그룹 선택 중 오류 발생: {e}")
             return False
     
-    def _execute_product_upload_workflow(self, group_name):
+    def _execute_product_upload_workflow(self, group_name, market_config):
         """
         product_editor_core6_1의 상품 업로드 워크플로우를 실행합니다.
+        쿠팡을 포함한 모든 마켓의 업로드를 실행합니다.
         
         Args:
             group_name (str): 업로드할 그룹명
+            market_config (dict): 마켓 설정 정보
             
         Returns:
             bool: 성공 여부
@@ -1479,6 +1499,37 @@ class ProductEditorCore6_1Dynamic:
             # 7. 카페24 로그인해서 11번가 등록자료 가져오기
             if not self._import_11st_products_from_cafe24():
                 logger.warning("카페24 11번가 상품 가져오기에 실패했지만 계속 진행합니다")
+            
+            # 8. 쿠팡 API 연동업체를 '넥스트엔진'으로 변경
+            coupang_id = market_config.get('coupang_id', '')
+            coupang_password = market_config.get('coupang_password', '')
+            
+            if coupang_id and coupang_password:
+                logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 시작")
+                try:
+                    coupang_manager = CoupangMarketManager(self.driver, self.wait)
+                    if coupang_manager.change_api_integrator_to_nextengine(market_config):
+                        logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 완료")
+                    else:
+                        logger.warning("쿠팡 API 연동업체 '넥스트엔진' 변경에 실패했지만 계속 진행합니다")
+                except Exception as e:
+                    logger.error(f"쿠팡 API 연동업체 변경 중 오류 발생: {str(e)}")
+            else:
+                logger.info("쿠팡 로그인 정보가 없어 연동업체 변경을 건너뜁니다")
+            
+            # 9. 쿠팡 로그아웃
+            if coupang_id and coupang_password:
+                logger.info("쿠팡 로그아웃 시작")
+                try:
+                    coupang_manager = CoupangMarketManager(self.driver, self.wait)
+                    if coupang_manager.logout_coupang():
+                        logger.info("쿠팡 로그아웃 완료")
+                    else:
+                        logger.warning("쿠팡 로그아웃에 실패했지만 계속 진행합니다")
+                except Exception as e:
+                    logger.error(f"쿠팡 로그아웃 중 오류 발생: {str(e)}")
+            else:
+                logger.info("쿠팡 로그인 정보가 없어 로그아웃을 건너뜁니다")
             
             logger.info(f"상품 업로드 워크플로우 완료: {group_name}")
             return True
@@ -1636,7 +1687,7 @@ class ProductEditorCore6_1Dynamic:
                     continue
                 
                 # 2-4. 상품 업로드 워크플로우 실행 (product_editor_core6_1 기능 통합)
-                if not self._execute_product_upload_workflow(market_config['groupname']):
+                if not self._execute_product_upload_workflow(market_config['groupname'], market_config):
                     logger.error(f"상품 업로드 워크플로우 실패: {market_config['groupname']}")
                     continue
                 
@@ -1955,32 +2006,78 @@ class ProductEditorCore6_1Dynamic:
                 logger.error("쿠팡 API 키 입력창들을 찾을 수 없습니다")
                 return False
             
-            # 3. API 검증 버튼 클릭
-            logger.info("API 검증 버튼 클릭 시도")
+            # 3. API 검증 버튼 클릭 및 동적 감지
+            logger.info("API 검증 버튼 클릭 및 배송 프로필 감지 시작")
+            
+            # API 검증 버튼 선택자
             api_verify_selectors = [
                 "//button[contains(@class, 'ant-btn-primary') and contains(., 'API 검증')]",
                 "//button[contains(., 'API 검증')]",
                 "//span[text()='API 검증']/parent::button"
             ]
             
-            verify_clicked = False
-            for selector in api_verify_selectors:
-                try:
-                    verify_button = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    verify_button.click()
-                    logger.info(f"API 검증 버튼 클릭 성공: {selector}")
-                    verify_clicked = True
-                    time.sleep(2)  # 검증 처리 대기
-                    break
-                except Exception as e:
-                    logger.debug(f"API 검증 버튼 선택자 실패: {selector} - {e}")
-                    continue
+            # 배송 프로필 감지 선택자 (출고지, 반품지, 출고택배사 포함)
+            shipping_profile_selectors = [
+                "//div[contains(text(), '출고지:')]",
+                "//div[contains(text(), '반품지:')]", 
+                "//div[contains(text(), '출고택배사:')]",
+                "//div[contains(@class, 'Body3Regular14') and contains(text(), '출고지')]",
+                "//div[contains(@class, 'Body3Regular14') and contains(text(), '반품지')]",
+                "//div[contains(@class, 'Body3Regular14') and contains(text(), '출고택배사')]"
+            ]
             
-            if not verify_clicked:
-                logger.warning("API 검증 버튼 클릭 실패")
-                # 검증 버튼 클릭 실패해도 입력은 성공으로 처리
+            # 최대 20회 시도
+            max_attempts = 20
+            profile_detected = False
+            
+            for attempt in range(max_attempts):
+                logger.info(f"API 검증 시도 {attempt + 1}/{max_attempts}")
+                
+                # API 검증 버튼 클릭
+                verify_clicked = False
+                for selector in api_verify_selectors:
+                    try:
+                        verify_button = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                        verify_button.click()
+                        logger.info(f"API 검증 버튼 클릭 성공: {selector}")
+                        verify_clicked = True
+                        break
+                    except Exception as e:
+                        logger.debug(f"API 검증 버튼 선택자 실패: {selector} - {e}")
+                        continue
+                
+                if not verify_clicked:
+                    logger.warning(f"API 검증 버튼 클릭 실패 (시도 {attempt + 1})")
+                    time.sleep(60)  # 60초 대기 후 재시도
+                    continue
+                
+                # 검증 처리 대기
+                time.sleep(10)
+                
+                # 배송 프로필 선택자 감지 확인
+                for profile_selector in shipping_profile_selectors:
+                    try:
+                        profile_element = self.driver.find_element(By.XPATH, profile_selector)
+                        if profile_element.is_displayed():
+                            logger.info(f"배송 프로필 감지 성공: {profile_selector}")
+                            profile_detected = True
+                            break
+                    except Exception:
+                        continue
+                
+                if profile_detected:
+                    logger.info(f"배송 프로필 감지 완료 (시도 {attempt + 1}/{max_attempts})")
+                    break
+                else:
+                    logger.info(f"배송 프로필 미감지, 재시도 대기 중... (시도 {attempt + 1}/{max_attempts})")
+                    time.sleep(60)  # 60초 대기 후 재시도
+            
+            if not profile_detected:
+                logger.warning(f"최대 {max_attempts}회 시도 후에도 배송 프로필을 감지하지 못했습니다. 다음 단계로 진행합니다.")
+            else:
+                logger.info("쿠팡 API 검증 및 배송 프로필 감지 완료")
             
             logger.info("쿠팡 API 키 입력 완료")
             return True
