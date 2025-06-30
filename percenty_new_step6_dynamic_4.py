@@ -3,7 +3,7 @@
 """
 퍼센티 동적 업로드 테스트 스크립트
 
-percenty_id.xlsx의 cafe24_upload 시트를 기반으로 동적 업로드를 테스트합니다.
+percenty_id.xlsx의 market_id 시트를 기반으로 동적 업로드를 테스트합니다.
 기존 percenty_new_step6_1.py의 로그인 방식을 참고하여 안정적인 테스트 환경을 제공합니다.
 """
 
@@ -108,18 +108,16 @@ def main():
         
         print("✅ 신규상품등록 화면 전환 성공!")
         
-        """
         # 10-1. 퍼센티 확장프로그램 설치
         print("\n10-1. 퍼센티 확장프로그램 설치...")
         if not dynamic_core._install_percenty_extension():
             print("⚠️ 퍼센티 확장프로그램 설치 실패, 계속 진행합니다")
         else:
             print("✅ 퍼센티 확장프로그램 설치 성공!")
-        """
         
         # 11. 동적 업로드 워크플로우 실행
         print("\n11. 동적 업로드 워크플로우 실행...")
-        print("    percenty_id.xlsx의 cafe24_upload 시트를 기반으로 12번 순환 업로드를 진행합니다.")
+        print("    percenty_id.xlsx의 market_id 시트를 기반으로 12번 순환 업로드를 진행합니다.")
         print("    각 설정별로 그룹 선택 → 상품 업로드 과정을 반복합니다.")
         
         if dynamic_core.execute_dynamic_upload_workflow():

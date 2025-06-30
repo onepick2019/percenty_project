@@ -5,7 +5,9 @@
 percenty_id.xlsx의 market_id 시트를 파싱하여 동적으로 업로드를 진행합니다.
 - 로그인 아이디와 매핑되는 행들을 순차적으로 처리
 - 11번가 마켓 설정 및 API 연동
-- 동적 그룹 선택 및 업로드 진행
+- 신규상품등록에서 동적 그룹 선택 및 업로드 진행
+
+- 쿠팡을 제외한 모드 마켓 업로드 지원, 신규상품등록 화면에서 진행행
 """
 
 import logging
@@ -1459,7 +1461,7 @@ class ProductEditorCore6_Dynamic1:
             logger.info(f"상품 업로드 워크플로우 시작: {group_name}")
             
             # 1-4단계를 2회 반복
-            for round_num in range(1, 3):  # 1회차, 2회차
+            for round_num in range(1, 11):  # 1회차, 2회차
                 logger.info(f"업로드 {round_num}회차 시작")
                 
                 # 1. 상품 수 확인 (0개인 경우 스킵)
@@ -1495,7 +1497,7 @@ class ProductEditorCore6_Dynamic1:
                 time.sleep(5)
                 
                 # 2회차가 아닌 경우에만 새로고침 버튼 클릭
-                if round_num < 2:
+                if round_num < 11:
                     logger.info(f"{round_num}회차 완료, 새로고침 버튼 클릭 후 다음 회차 진행")
                     try:
                         # 새로고침 버튼 클릭
