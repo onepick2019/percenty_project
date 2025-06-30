@@ -148,8 +148,52 @@ class PeriodicExecutionManager:
         self.running_processes = []  # 실행 중인 프로세스 추적
         self.process_lock = threading.Lock()  # 프로세스 리스트 동기화
         
+        # 단계 6-2의 48시간 주기 실행을 위한 추적
+        self.step62_last_run = None  # 단계 6-2의 마지막 실행 시간
+        self.step62_config_file = Path(__file__).parent.parent / "step62_last_run.json"
+        self._load_step62_last_run()
+        
         # 프로젝트 루트 경로
         self.project_root = Path(__file__).parent.parent
+        
+    def _load_step62_last_run(self):
+        """단계 6-2의 마지막 실행 시간을 파일에서 로드"""
+        try:
+            if self.step62_config_file.exists():
+                import json
+                with open(self.step62_config_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if 'last_run' in data:
+                        from datetime import datetime
+                        self.step62_last_run = datetime.fromisoformat(data['last_run'])
+                        self._log(f"단계 6-2 마지막 실행 시간 로드: {self.step62_last_run}")
+        except Exception as e:
+            self._log(f"단계 6-2 마지막 실행 시간 로드 실패: {e}")
+            self.step62_last_run = None
+    
+    def _save_step62_last_run(self):
+        """단계 6-2의 마지막 실행 시간을 파일에 저장"""
+        try:
+            if self.step62_last_run:
+                import json
+                data = {'last_run': self.step62_last_run.isoformat()}
+                with open(self.step62_config_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                self._log(f"단계 6-2 마지막 실행 시간 저장: {self.step62_last_run}")
+        except Exception as e:
+            self._log(f"단계 6-2 마지막 실행 시간 저장 실패: {e}")
+    
+    def _should_run_step62(self) -> bool:
+        """단계 6-2를 실행해야 하는지 확인 (48시간 주기)"""
+        if self.step62_last_run is None:
+            return True  # 처음 실행
+        
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        time_since_last_run = now - self.step62_last_run
+        
+        # 48시간(2일) 경과 확인
+        return time_since_last_run >= timedelta(hours=48)
         
     def set_config(self, config: Dict):
         """주기적 실행 설정
@@ -304,9 +348,23 @@ class PeriodicExecutionManager:
                             results[account_id] = False
                             return
                         
+                        # 단계 6-2의 48시간 주기 확인
+                        if step == '62':
+                            if not self._should_run_step62():
+                                self._log(f"계정 {account_id}, 단계 6-2: 48시간이 경과하지 않아 건너뜁니다.")
+                                continue
+                            else:
+                                self._log(f"계정 {account_id}, 단계 6-2: 48시간이 경과하여 실행합니다.")
+                        
                         # 단계에 따라 배치수량 결정
                         current_batch_quantity = step1_quantity if step == '1' else other_quantity
                         success = self._execute_single_step(account_id, step, current_batch_quantity)
+                        
+                        # 단계 6-2 실행 성공 시 마지막 실행 시간 업데이트
+                        if step == '62' and success:
+                            from datetime import datetime
+                            self.step62_last_run = datetime.now()
+                            self._save_step62_last_run()
                         
                         if success:
                             self._log(f"계정 {account_id}, 단계 {step} 완료")
@@ -347,10 +405,11 @@ class PeriodicExecutionManager:
                 thread.start()
                 self._log(f"계정 {account_id} 독립 프로세스 시작됨")
                 
-                # 다음 계정 실행 전 5초 대기 (마지막 계정이 아닌 경우)
+                # 다음 계정 실행 전 대기 (마지막 계정이 아닌 경우)
                 if i < len(selected_accounts) - 1:
-                    self._log(f"다음 계정 실행까지 5초 대기...")
-                    time.sleep(5)
+                    account_delay = self.config.get('account_delay', 5)  # 기본값 5초
+                    self._log(f"다음 계정 실행까지 {account_delay}초 대기...")
+                    time.sleep(account_delay)
             
             # 모든 스레드 완료 대기
             for thread in threads:
@@ -381,7 +440,7 @@ class PeriodicExecutionManager:
             bool: 실행 성공 여부
         """
         try:
-            # CLI 배치 실행 명령 구성
+            # 모든 단계는 CLI 배치 실행 명령 구성
             cli_script = self.project_root / "cli" / "batch_cli.py"
             
             if not cli_script.exists():
@@ -497,7 +556,10 @@ class PeriodicExecutionManager:
             '4': 135,    # 2.25분/아이템 (번역 처리, 휴먼딜레이 미적용)
             '51': 285,   # 4.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-160초)
             '52': 315,   # 5.25분/아이템 (최종 처리 단계 + 휴먼딜레이 152-170초)
-            '53': 345    # 5.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-180초)
+            '53': 345,   # 5.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-180초)
+            '61': 300,   # 5분/아이템 (동적 업로드 처리)
+            '62': 300,   # 5분/아이템 (동적 업로드 처리)
+            '63': 300    # 5분/아이템 (동적 업로드 처리)
         }
         
         # 청크 수 계산

@@ -162,9 +162,9 @@ class PercentyAdvancedGUI:
         # 계정 정보 로드
         self.load_account_data()
         
-        # 단계 선택 (체크박스) - 1-6단계 지원 (2단계는 21, 22, 23으로, 3단계는 31, 32, 33으로, 5단계는 51, 52, 53으로 분리)
+        # 단계 선택 (체크박스) - 1-6단계 지원 (2단계는 21, 22, 23으로, 3단계는 31, 32, 33으로, 5단계는 51, 52, 53으로, 6단계는 61, 62, 63으로 분리)
         self.step_vars = {}
-        steps = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
+        steps = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']
         for step in steps:
             self.step_vars[step] = tk.BooleanVar(value=False)  # 기본적으로 아무것도 선택하지 않음
         
@@ -221,7 +221,7 @@ class PercentyAdvancedGUI:
         step_frame = ttk.LabelFrame(basic_frame, text="실행할 단계 선택", padding=15)
         step_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # 단계 체크박스들을 배치 (1, 21, 22, 23, 31, 32, 33, 4, 51, 52, 53, 6단계)
+        # 단계 체크박스들을 배치 (1, 21, 22, 23, 31, 32, 33, 4, 51, 52, 53, 61, 62, 63단계)
         step_labels = {
             '1': '단계 1',
             '21': '단계 2-1 (서버1)',
@@ -234,14 +234,15 @@ class PercentyAdvancedGUI:
             '51': '단계 5-1',
             '52': '단계 5-2',
             '53': '단계 5-3',
-            '6': '단계 6'
+            '61': '단계 6-1',
+            '62': '단계 6-2',
+            '63': '단계 6-3'
         }
         
         # 체크박스를 배치
         positions = [
-            ('1', 0, 0), ('51', 0, 1), ('52', 0, 2), ('53', 0, 3),
-            ('21', 1, 0), ('22', 1, 1), ('23', 1, 2), ('4', 1, 3),
-            ('31', 2, 0), ('32', 2, 1), ('33', 2, 2), ('6', 2, 3)
+            ('1', 0, 0), ('51', 0, 1), ('52', 0, 2), ('53', 0, 3), ('21', 0, 4), ('22', 0, 5), ('23', 0, 6),
+            ('4', 1, 0), ('31', 1, 1), ('32', 1, 2), ('33', 1, 3), ('61', 1, 4), ('62', 1, 5), ('63', 1, 6)
         ]
         
         for step, row, col in positions:
@@ -252,7 +253,7 @@ class PercentyAdvancedGUI:
         
         # 단계 선택 버튼들
         step_btn_frame = ttk.Frame(step_frame)
-        step_btn_frame.grid(row=3, column=0, columnspan=3, pady=(10, 0))
+        step_btn_frame.grid(row=2, column=0, columnspan=7, pady=(10, 0))
         
         ttk.Button(step_btn_frame, text="모든 단계 선택", 
                   command=self.select_all_steps, width=12).pack(side=tk.LEFT, padx=5)
@@ -374,6 +375,9 @@ class PercentyAdvancedGUI:
                 '31': tk.StringVar(value="2"),      # step3_1_core.py 기본값
                 '32': tk.StringVar(value="2"),      # step3_2_core.py 기본값
                 '33': tk.StringVar(value="2"),      # step3_3_core.py 기본값
+                '61': tk.StringVar(value="자동"),     # step6_1_core.py 기본값
+                '62': tk.StringVar(value="자동"),     # step6_2_core.py 기본값
+                '63': tk.StringVar(value="자동"),     # step6_3_core.py 기본값
             }
         
         # 청크 사이즈 입력 필드들을 그리드로 배치
@@ -388,7 +392,10 @@ class PercentyAdvancedGUI:
             '4': '단계 4',
             '31': '단계 3-1',
             '32': '단계 3-2',
-            '33': '단계 3-3'
+            '33': '단계 3-3',
+            '61': '단계 6-1',
+            '62': '단계 6-2',
+            '63': '단계 6-3'
         }
         
         # 청크 사이즈 입력 필드들을 6열로 배치
@@ -404,14 +411,14 @@ class PercentyAdvancedGUI:
             ttk.Label(step_chunk_frame, text=f"{label}:", width=8).pack(side=tk.LEFT)
             chunk_entry = ttk.Entry(step_chunk_frame, textvariable=self.periodic_chunk_vars[step_id], width=5)
             
-            # 4단계는 청크 사이즈를 사용하지 않으므로 비활성화
-            if step_id == '4':
+            # 4단계와 6단계들은 청크 사이즈를 사용하지 않으므로 비활성화
+            if step_id in ['4', '61', '62', '63']:
                 chunk_entry.config(state='disabled')
             
             chunk_entry.pack(side=tk.LEFT, padx=(5, 0))
             
             col += 1
-            if col >= 6:  # 6열로 배치
+            if col >= 7:  # 7열로 배치
                 col = 0
                 row += 1
         
@@ -434,7 +441,7 @@ class PercentyAdvancedGUI:
         # 주기적 실행용 단계 변수들 초기화
         if not hasattr(self, 'periodic_step_vars'):
             self.periodic_step_vars = {}
-            for step in ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']:
+            for step in ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']:
                 self.periodic_step_vars[step] = tk.BooleanVar()
         
         # 단계 체크박스들을 배치
@@ -450,13 +457,14 @@ class PercentyAdvancedGUI:
             '51': '단계 5-1',
             '52': '단계 5-2',
             '53': '단계 5-3',
-            '6': '단계 6'
+            '61': '단계 6-1',
+            '62': '단계 6-2',
+            '63': '단계 6-3'
         }
         
         positions = [
-            ('1', 0, 0), ('51', 0, 1), ('52', 0, 2), ('53', 0, 3),
-            ('21', 1, 0), ('22', 1, 1), ('23', 1, 2), ('4', 1, 3),
-            ('31', 2, 0), ('32', 2, 1), ('33', 2, 2), ('6', 2, 3)
+            ('1', 0, 0), ('51', 0, 1), ('52', 0, 2), ('53', 0, 3), ('21', 0, 4), ('22', 0, 5), ('23', 0, 6),
+            ('4', 1, 0), ('31', 1, 1), ('32', 1, 2), ('33', 1, 3), ('61', 1, 4), ('62', 1, 5), ('63', 1, 6)
         ]
         
         for step, row, col in positions:
@@ -467,7 +475,7 @@ class PercentyAdvancedGUI:
         
         # 단계 선택 버튼들
         step_btn_frame = ttk.Frame(step_frame)
-        step_btn_frame.grid(row=3, column=0, columnspan=4, pady=(10, 0))
+        step_btn_frame.grid(row=2, column=0, columnspan=7, pady=(10, 0))
         
         ttk.Button(step_btn_frame, text="모든 단계 선택", 
                   command=self.select_all_periodic_steps, width=12).pack(side=tk.LEFT, padx=5)
@@ -570,7 +578,26 @@ class PercentyAdvancedGUI:
         minute_entry = ttk.Entry(time_frame, textvariable=self.periodic_minute_var, width=5)
         minute_entry.pack(side=tk.LEFT, padx=(0, 5))
         
-        ttk.Label(time_frame, text="분").pack(side=tk.LEFT)
+        ttk.Label(time_frame, text="분").pack(side=tk.LEFT, padx=(0, 20))
+        
+        # 계정 간 대기시간 설정
+        ttk.Label(time_frame, text="계정 간 대기시간:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 계정 간 대기시간 변수 초기화
+        if not hasattr(self, 'periodic_account_delay_var'):
+            self.periodic_account_delay_var = tk.StringVar(value="120")
+        
+        delay_entry = ttk.Entry(time_frame, textvariable=self.periodic_account_delay_var, width=8)
+        delay_entry.pack(side=tk.LEFT, padx=(0, 5))
+        
+        ttk.Label(time_frame, text="초").pack(side=tk.LEFT)
+        
+        # 단계 6-2 특별 설정
+        step62_frame = ttk.Frame(schedule_frame)
+        step62_frame.pack(fill=tk.X, pady=(10, 5))
+        
+        ttk.Label(step62_frame, text="※ 단계 6-2는 48시간마다 실행됩니다 (다른 단계는 매일 실행)", 
+                 foreground="blue", font=("맑은 고딕", 9)).pack(side=tk.LEFT)
         
         # 주기적 실행 제어 버튼들
         control_frame = ttk.Frame(periodic_frame)
@@ -814,7 +841,7 @@ class PercentyAdvancedGUI:
         
     def get_selected_steps(self):
         """선택된 단계 목록 반환"""
-        step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
+        step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']
         return [step for step in step_order if step in self.step_vars and self.step_vars[step].get()]
         
     def _add_log(self, message):
@@ -1024,7 +1051,7 @@ class PercentyAdvancedGUI:
                             "--quantity", quantity
                         ]
                     else:
-                        # 기존 단계들은 batch_cli.py 사용
+                        # 모든 단계는 batch_cli.py 사용
                         cli_step = str(step)  # step을 문자열로 변환
                         cmd = [
                             sys.executable,  # python.exe 경로
@@ -1037,7 +1064,7 @@ class PercentyAdvancedGUI:
                         ]
                     
                     # 헤드리스 모드 옵션 추가 (Step 2, 3가 아닌 경우에만)
-                    if self.headless_var.get() and step not in ['21', '22', '23', '31', '32', '33']:
+                    if self.headless_var.get() and step not in ['21', '22', '23', '31', '32', '33', '61', '62', '63']:
                         cmd.extend(["--headless"])
                     
                     try:
@@ -1371,6 +1398,11 @@ class PercentyAdvancedGUI:
                         if 'selected_accounts' in config:
                             # 계정 선택 상태 복원 (필요시 구현)
                             pass
+                        if 'account_delay' in config:
+                            self.periodic_account_delay_var.set(str(config['account_delay']))
+                        else:
+                            # 기본값 120초 설정
+                            self.periodic_account_delay_var.set("120")
                         logger.info("주기적 실행 설정을 로드했습니다.")
             else:
                 logger.info("주기적 실행 설정 파일이 없습니다. 기본값을 사용합니다.")
@@ -1453,7 +1485,7 @@ class PercentyAdvancedGUI:
                 return
             
             # 선택된 단계 확인 (올바른 순서로 정렬)
-            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
+            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']
             selected_steps = [step for step in step_order if step in self.periodic_step_vars and self.periodic_step_vars[step].get()]
             if not selected_steps:
                 messagebox.showerror("오류", "실행할 단계를 선택해주세요.")
@@ -1480,6 +1512,17 @@ class PercentyAdvancedGUI:
                     }
                     chunk_sizes[step_id] = default_chunks.get(step_id, 10)
             
+            # 계정 간 대기시간 검증
+            account_delay_str = self.periodic_account_delay_var.get().strip()
+            if not account_delay_str.isdigit():
+                messagebox.showerror("오류", "계정 간 대기시간은 숫자만 입력해주세요.")
+                return
+            
+            account_delay = int(account_delay_str)
+            if account_delay < 0:
+                messagebox.showerror("오류", "계정 간 대기시간은 0 이상이어야 합니다.")
+                return
+            
             # 주기적 실행 설정 구성
             schedule_time = f"{hour:02d}:{minute:02d}"
             config = {
@@ -1489,6 +1532,7 @@ class PercentyAdvancedGUI:
                 'selected_accounts': selected_accounts,
                 'schedule_time': schedule_time,
                 'step_interval': 10,  # 단계 간 10초 대기
+                'account_delay': account_delay,  # 계정 간 대기시간
                 'chunk_sizes': chunk_sizes  # 단계별 청크 사이즈 추가
             }
             
@@ -1503,7 +1547,8 @@ class PercentyAdvancedGUI:
                 message += f"1단계 배치 수량: {step1_quantity}개\n"
                 message += f"나머지 단계 배치 수량: {other_quantity}개\n"
                 message += f"선택된 단계: {', '.join(selected_steps)}\n"
-                message += f"선택된 계정: {len(selected_accounts)}개"
+                message += f"선택된 계정: {len(selected_accounts)}개\n"
+                message += f"계정 간 대기시간: {account_delay}초"
                 
                 messagebox.showinfo("주기적 실행 시작", message)
                 
@@ -1583,12 +1628,24 @@ class PercentyAdvancedGUI:
                 messagebox.showerror("오류", "실행할 계정을 선택해주세요.")
                 return
             
+            # 계정 간 대기시간 검증
+            account_delay_str = self.periodic_account_delay_var.get().strip()
+            if not account_delay_str.isdigit():
+                messagebox.showerror("오류", "계정 간 대기시간은 숫자만 입력해주세요.")
+                return
+            
+            account_delay = int(account_delay_str)
+            if account_delay < 0:
+                messagebox.showerror("오류", "계정 간 대기시간은 0 이상이어야 합니다.")
+                return
+            
             # 테스트 실행 (여기서는 메시지만 표시)
             message = f"테스트 실행이 시작됩니다.\n\n"
             message += f"1단계 배치 수량: {step1_quantity}개\n"
             message += f"나머지 단계 배치 수량: {other_quantity}개\n"
             message += f"선택된 단계: {', '.join(selected_steps)}\n"
-            message += f"선택된 계정: {len(selected_accounts)}개"
+            message += f"선택된 계정: {len(selected_accounts)}개\n"
+            message += f"계정 간 대기시간: {account_delay}초"
             
             messagebox.showinfo("테스트 실행", message)
             self._add_log(f"주기적 실행 테스트 시작: 1단계 {step1_quantity}개, 나머지 단계 {other_quantity}개, 단계 {', '.join(selected_steps)}")

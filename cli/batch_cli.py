@@ -833,8 +833,8 @@ def create_parser():
     
     # 단일 단계 실행
     single_parser = subparsers.add_parser('single', help='단일 단계 배치 실행')
-    single_parser.add_argument('--step', type=int, required=True, choices=[1, 2, 3, 4, 5, 6, 21, 22, 23, 31, 32, 33, 51, 52, 53],
-                              help='실행할 단계 번호 (Step 2 하위: 21=2_1, 22=2_2, 23=2_3, Step 3 하위: 31=3_1, 32=3_2, 33=3_3, Step 5 하위: 51=5_1, 52=5_2, 53=5_3)')
+    single_parser.add_argument('--step', type=int, required=True, choices=[1, 2, 3, 4, 5, 6, 21, 22, 23, 31, 32, 33, 51, 52, 53, 61, 62, 63],
+                              help='실행할 단계 번호 (Step 2 하위: 21=2_1, 22=2_2, 23=2_3, Step 3 하위: 31=3_1, 32=3_2, 33=3_3, Step 5 하위: 51=5_1, 52=5_2, 53=5_3, Step 6 하위: 61=6_1, 62=6_2, 63=6_3)')
     single_parser.add_argument('--accounts', nargs='+', required=True,
                               help='계정 ID 목록')
     single_parser.add_argument('--quantity', type=int, default=100,
@@ -868,7 +868,7 @@ def create_parser():
     multi_batch_parser.add_argument('accounts', nargs='+',
                                     help='실행할 계정 ID 목록 (예: 1 2 3 또는 account_1 account_2)')
     multi_batch_parser.add_argument('-s', '--step', type=int, default=1,
-                                    help='실행할 단계 (기본값: 1, Step 5 하위: 51=5_1, 52=5_2, 53=5_3)')
+                                    help='실행할 단계 (기본값: 1, Step 5 하위: 51=5_1, 52=5_2, 53=5_3, Step 6 하위: 61=6_1, 62=6_2, 63=6_3)')
     multi_batch_parser.add_argument('-q', '--quantity', type=int, default=10,
                                     help='처리할 수량 (기본값: 10)')
     multi_batch_parser.add_argument('-i', '--interval', type=int, default=5,

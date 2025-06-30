@@ -979,8 +979,102 @@ class BatchManager:
                     account_logger.error(f"Step5_3Core 예외 상세: {traceback.format_exc()}")
                     raise
                     
-
-                
+            elif step == 61:
+                account_logger.info(f"61단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step6_1Core 동적 임포트
+                    from core.steps.step6_1_core import execute_step6_1
+                    
+                    # 기존 브라우저 재사용
+                    driver = self.browser_manager.get_driver(browser_id)
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_logger.info(f"계정 정보: 원본 ID: {account_id}, 실제 ID: {real_account_id}")
+                    
+                    # Step6_1 실행 (기존 브라우저 사용)
+                    step_result = execute_step6_1(
+                        account_id=real_account_id,
+                        quantity=quantity,
+                        headless=self.config.get('browser', {}).get('headless', False),
+                        driver=driver  # 기존 드라이버 전달
+                    )
+                    
+                    account_logger.info(f"Step6_1Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"61단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step6_1Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step6_1Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 62:
+                account_logger.info(f"62단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step6_2Core 동적 임포트
+                    from core.steps.step6_2_core import execute_step6_2
+                    
+                    # 기존 브라우저 재사용
+                    driver = self.browser_manager.get_driver(browser_id)
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_logger.info(f"계정 정보: 원본 ID: {account_id}, 실제 ID: {real_account_id}")
+                    
+                    # Step6_2 실행 (기존 브라우저 사용)
+                    step_result = execute_step6_2(
+                        account_id=real_account_id,
+                        quantity=quantity,
+                        headless=self.config.get('browser', {}).get('headless', False),
+                        driver=driver  # 기존 드라이버 전달
+                    )
+                    
+                    account_logger.info(f"Step6_2Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"62단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step6_2Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step6_2Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 63:
+                account_logger.info(f"63단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step6_3Core 동적 임포트
+                    from core.steps.step6_3_core import execute_step6_3
+                    
+                    # 기존 브라우저 재사용
+                    driver = self.browser_manager.get_driver(browser_id)
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_logger.info(f"계정 정보: 원본 ID: {account_id}, 실제 ID: {real_account_id}")
+                    
+                    # Step6_3 실행 (기존 브라우저 사용)
+                    step_result = execute_step6_3(
+                        account_id=real_account_id,
+                        quantity=quantity,
+                        headless=self.config.get('browser', {}).get('headless', False),
+                        driver=driver  # 기존 드라이버 전달
+                    )
+                    
+                    account_logger.info(f"Step6_3Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"63단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step6_3Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step6_3Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
             elif step == 4:
                 account_logger.info(f"4단계 실행 시작 - 수량: {quantity}")
                 try:
