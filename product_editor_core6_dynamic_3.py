@@ -150,6 +150,40 @@ class ProductEditorCore6_Dynamic3:
             logger.error(f"마켓 설정 정보 로드 중 오류 발생: {e}")
             return []
     
+    def _set_items_per_page_50(self):
+        """
+        50개씩 보기 설정을 수행합니다.
+        
+        Returns:
+            bool: 설정 성공 여부
+        """
+        DELAY_MEDIUM = 2
+        
+        items_per_page_success = False
+        for attempt in range(3):
+            try:
+                logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
+                
+                # 50개씩 보기 설정
+                if self.dropdown_utils.select_items_per_page("50"):
+                    logger.info("50개씩 보기 설정 성공")
+                    items_per_page_success = True
+                    break
+                else:
+                    logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
+                
+                if attempt < 2:
+                    time.sleep(DELAY_MEDIUM)
+                    
+            except Exception as e:
+                logger.error(f"50개씩 보기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
+                time.sleep(DELAY_MEDIUM)
+        
+        if not items_per_page_success:
+            logger.warning("50개씩 보기 설정에 실패했지만 작업을 계속 진행합니다.")
+        
+        return items_per_page_success
+    
     def setup_market_configuration(self, market_config):
         """
         마켓 설정 화면에서 모든 마켓 API 설정을 진행합니다.
@@ -1457,9 +1491,9 @@ class ProductEditorCore6_Dynamic3:
                     logger.info(f"{round_num}회차 확인된 상품 수: {product_count}개")
                 
                 # 2. 50개씩 보기 설정 
-                # if not self._set_items_per_page_50(): 
-                #    logger.error("50개씩 보기 설정 실패") 
-                #    return False
+                if not self._set_items_per_page_50(): 
+                   logger.error("50개씩 보기 설정 실패") 
+                   return False
                 
                 # 3. 전체선택
                 if not self._select_all_products():
@@ -2130,6 +2164,7 @@ class ProductEditorCore6_Dynamic3:
     def _select_status_dropdown(self):
         """
         상태 드롭박스를 열고 '미업로드'를 선택합니다.
+        간단한 드롭다운 클릭 후 옵션 선택 방식을 사용합니다.
         
         Returns:
             bool: 성공 시 True, 실패 시 False
@@ -2137,53 +2172,44 @@ class ProductEditorCore6_Dynamic3:
         try:
             logger.info("상태 드롭박스에서 '미업로드' 선택 시작")
             
-            # 상태 드롭박스 클릭하여 열기
-            status_dropdown_selectors = [
-                "//div[contains(@class, 'ant-select') and .//span[contains(text(), '상태 검색')]]",
-                "//div[contains(@class, 'ant-select-selector') and .//span[contains(text(), '상태 검색')]]",
-                "//span[contains(text(), '상태 검색')]/ancestor::div[contains(@class, 'ant-select')]"
-            ]
+            # 1. 상태 드롭박스 클릭하여 열기 (더 정확한 선택자 사용)
+            dropdown_selector = "//div[contains(@class, 'ant-select') and .//span[contains(text(), '상태 검색')]]"
+            dropdown_element = self.wait.until(EC.element_to_be_clickable((By.XPATH, dropdown_selector)))
+            dropdown_element.click()
+            logger.info("상태 드롭박스 클릭")
+            time.sleep(2)  # 드롭다운 옵션이 로드될 시간 확보
             
-            dropdown_clicked = False
-            for selector in status_dropdown_selectors:
-                try:
-                    dropdown_element = self.wait.until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    dropdown_element.click()
-                    time.sleep(1)
-                    dropdown_clicked = True
-                    logger.info("상태 드롭박스 클릭 성공")
-                    break
-                except (TimeoutException, NoSuchElementException):
-                    continue
-            
-            if not dropdown_clicked:
-                logger.error("상태 드롭박스를 찾을 수 없습니다")
-                return False
-            
-            # '미업로드' 옵션 선택
-            unuploaded_option_selectors = [
+            # 2. '미업로드' 옵션 선택 (실제 DOM 구조 기반 선택자)
+            option_selectors = [
+                "//div[contains(@class, 'ant-select-item') and .//div[contains(@class, 'sc-kBRoID') and contains(text(), '미업로드')]]",
                 "//div[contains(@class, 'ant-select-item') and contains(text(), '미업로드')]",
-                "//div[contains(@class, 'rc-virtual-list-holder')]//div[contains(text(), '미업로드')]",
-                "//div[@role='option' and contains(text(), '미업로드')]"
+                "//div[contains(@class, 'sc-kBRoID') and contains(text(), '미업로드')]",
+                "//div[@role='option' and .//div[contains(text(), '미업로드')]]",
+                "//div[contains(@class, 'ant-select-item') and text()='미업로드']",
+                "//div[@role='option' and text()='미업로드']"
             ]
             
-            for selector in unuploaded_option_selectors:
+            option_clicked = False
+            for selector in option_selectors:
                 try:
-                    option_element = self.wait.until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
+                    option_element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
                     option_element.click()
-                    time.sleep(1)
-                    logger.info("'미업로드' 옵션 선택 성공")
-                    return True
-                except (TimeoutException, NoSuchElementException):
+                    logger.info(f"'미업로드' 옵션 선택 완료 (선택자: {selector})")
+                    option_clicked = True
+                    break
+                except TimeoutException:
                     continue
             
-            logger.error("'미업로드' 옵션을 찾을 수 없습니다")
-            return False
+            if not option_clicked:
+                logger.error("모든 선택자로 '미업로드' 옵션을 찾을 수 없음")
+                return False
+                
+            time.sleep(1)
+            return True
             
+        except TimeoutException:
+            logger.error("상태 드롭박스 또는 '미업로드' 옵션을 찾을 수 없음")
+            return False
         except Exception as e:
             logger.error(f"상태 드롭박스 선택 중 오류 발생: {e}")
             return False

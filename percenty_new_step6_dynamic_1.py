@@ -13,13 +13,13 @@ import logging
 import traceback
 from pathlib import Path
 
-# 로깅 설정
+# 로깅 설정 (디버깅 완료 후 파일 로깅 비활성화)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('dynamic_upload_test.log', encoding='utf-8')
+        # logging.FileHandler('dynamic_upload_test.log', encoding='utf-8')  # 디버깅 완료로 주석처리
     ]
 )
 

@@ -357,44 +357,32 @@ class PercentyNewStep2Server1:
             # 그룹 선택 후 페이지 로드 대기
             time.sleep(DELAY_MEDIUM)
             
-            # 3. 50개씩 보기 설정 (최적화됨)
-            logger.info("3. 50개씩 보기 설정 (최적화된 방식)")
-            start_time = time.time()
+            # 3. 50개씩 보기 설정
+            logger.info("50개씩 보기 설정 시작")
             
-            # 최적화된 50개씩 보기 설정
+            # 50개씩 보기 설정 시도 (최대 3회 재시도)
             items_per_page_success = False
-            try:
-                logger.info("최적화된 방식으로 50개씩 보기 설정 시도")
-                
-                # 최적화된 공통 유틸리티 사용 (타임아웃 단축)
-                if self.dropdown_utils.select_items_per_page("50", timeout=3):
-                    logger.info("최적화된 방식으로 50개씩 보기 설정 성공")
-                    items_per_page_success = True
-                    self._track_performance('items_per_page', start_time)
-                else:
-                    logger.warning("최적화된 방식 실패, 기존 방식으로 재시도")
-                    # 기존 방식으로 폴백
-                    if self.dropdown_manager.select_items_per_page("50"):
-                        logger.info("기존 방식으로 50개씩 보기 설정 성공")
-                        items_per_page_success = True
-                        self._track_performance('items_per_page_fallback', start_time)
-                    else:
-                        logger.warning("기존 방식으로도 50개씩 보기 설정 실패")
-                        
-            except Exception as e:
-                logger.error(f"50개씩 보기 설정 중 오류: {e}")
-                # 기존 방식으로 폴백
+            for attempt in range(3):
                 try:
-                    if self.dropdown_manager.select_items_per_page("50"):
-                        logger.info("폴백 방식으로 50개씩 보기 설정 성공")
+                    logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
+                    
+                    # 50개씩 보기 설정
+                    if dropdown_manager.select_items_per_page("50"):
+                        logger.info("50개씩 보기 설정 성공")
                         items_per_page_success = True
-                        self._track_performance('items_per_page_fallback', start_time)
-                except Exception as fallback_error:
-                    logger.error(f"폴백 방식도 실패: {fallback_error}")
+                        break
+                    else:
+                        logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
+                    
+                    if attempt < 2:
+                        time.sleep(DELAY_MEDIUM)
+                        
+                except Exception as e:
+                    logger.error(f"50개씩 보기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
+                    time.sleep(DELAY_MEDIUM)
             
             if not items_per_page_success:
-                logger.error("50개씩 보기 설정에 실패했습니다.")
-                return False
+                logger.warning("50개씩 보기 설정에 실패했지만 작업을 계속 진행합니다.")
             
             # 설정 완료 후 페이지 로드 대기
             time.sleep(DELAY_MEDIUM)

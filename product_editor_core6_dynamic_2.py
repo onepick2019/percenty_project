@@ -151,6 +151,40 @@ class ProductEditorCore6_Dynamic2:
             logger.error(f"마켓 설정 정보 로드 중 오류 발생: {e}")
             return []
     
+    def _set_items_per_page_50(self):
+        """
+        50개씩 보기 설정을 수행합니다.
+        
+        Returns:
+            bool: 설정 성공 여부
+        """
+        DELAY_MEDIUM = 2
+        
+        items_per_page_success = False
+        for attempt in range(3):
+            try:
+                logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
+                
+                # 50개씩 보기 설정
+                if self.dropdown_utils.select_items_per_page("50"):
+                    logger.info("50개씩 보기 설정 성공")
+                    items_per_page_success = True
+                    break
+                else:
+                    logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
+                
+                if attempt < 2:
+                    time.sleep(DELAY_MEDIUM)
+                    
+            except Exception as e:
+                logger.error(f"50개씩 보기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
+                time.sleep(DELAY_MEDIUM)
+        
+        if not items_per_page_success:
+            logger.warning("50개씩 보기 설정에 실패했지만 작업을 계속 진행합니다.")
+        
+        return items_per_page_success
+    
     def setup_market_configuration(self, market_config):
         """
         마켓 설정 화면에서 모든 마켓 API 설정을 진행합니다.
@@ -1456,9 +1490,9 @@ class ProductEditorCore6_Dynamic2:
                     logger.info(f"{round_num}회차 확인된 상품 수: {product_count}개")
                 
                 # 2. 50개씩 보기 설정 
-                # if not self._set_items_per_page_50(): 
-                #    logger.error("50개씩 보기 설정 실패") 
-                #    return False
+                if not self._set_items_per_page_50(): 
+                   logger.error("50개씩 보기 설정 실패") 
+                   return False
                 
                 # 3. 전체선택
                 if not self._select_all_products():

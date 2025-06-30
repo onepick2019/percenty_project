@@ -297,7 +297,7 @@ class PercentyNewStep2Server2:
             time.sleep(DELAY_MEDIUM)
             
             # 3. 50개씩 보기 설정
-            logger.info("3. 50개씩 보기 설정")
+            logger.info("50개씩 보기 설정 시작")
             
             # 50개씩 보기 설정 시도 (최대 3회 재시도)
             items_per_page_success = False
@@ -312,6 +312,8 @@ class PercentyNewStep2Server2:
                         break
                     else:
                         logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
+                    
+                    if attempt < 2:
                         time.sleep(DELAY_MEDIUM)
                         
                 except Exception as e:
@@ -319,8 +321,7 @@ class PercentyNewStep2Server2:
                     time.sleep(DELAY_MEDIUM)
             
             if not items_per_page_success:
-                logger.error("50개씩 보기 설정에 실패했습니다.")
-                return False
+                logger.warning("50개씩 보기 설정에 실패했지만 작업을 계속 진행합니다.")
             
             # 설정 완료 후 페이지 로드 대기
             time.sleep(DELAY_MEDIUM)

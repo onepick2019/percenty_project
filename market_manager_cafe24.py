@@ -255,7 +255,8 @@ class MarketManagerCafe24:
     
     def _select_11st_store(self, store_id_11st):
         """
-        11번가 스토어 ID에 해당하는 체크박스를 선택합니다.
+        11번가 스토어 ID에 해당하는 체크박스를 정확하게 선택합니다.
+        괄호 안의 store_id를 정확히 매칭하여 잘못된 선택을 방지합니다.
         
         Args:
             store_id_11st (str): 11번가 스토어 ID
@@ -266,38 +267,66 @@ class MarketManagerCafe24:
         try:
             logger.info(f"11번가 스토어 선택: {store_id_11st}")
             
-            # 11번가 스토어 ID가 포함된 span 요소 찾기 (체크박스 대신 span 클릭)
+            # 11번가 스토어 ID가 포함된 span 요소 찾기
             store_spans = self.driver.find_elements(
                 By.CSS_SELECTOR, 
                 "span.shop-label"
             )
             
+            # 정확한 매칭을 위한 후보 목록
+            exact_matches = []
+            partial_matches = []
+            
             for span in store_spans:
                 span_text = span.text
                 
-                if store_id_11st in span_text and "11번가" in span_text:
-                    logger.info(f"11번가 스토어 찾음: {span_text}")
+                # 11번가가 포함된 텍스트만 처리
+                if "11번가" in span_text:
+                    # 괄호 안의 정확한 store_id 매칭: 11번가(store_id_11st) 형태
+                    import re
+                    exact_pattern = rf'11번가\({re.escape(store_id_11st)}\)'
                     
-                    # span 요소 클릭 (체크박스가 자동으로 선택됨)
-                    try:
-                        span.click()
-                        time.sleep(1)
-                        logger.info("11번가 스토어 span 클릭으로 선택 완료")
-                        return True
-                    except Exception as click_error:
-                        logger.warning(f"span 클릭 실패, JavaScript 클릭 시도: {click_error}")
-                        # JavaScript 클릭 시도
-                        try:
-                            self.driver.execute_script("arguments[0].click();", span)
-                            time.sleep(1)
-                            logger.info("11번가 스토어 JavaScript 클릭으로 선택 완료")
-                            return True
-                        except Exception as js_error:
-                            logger.error(f"JavaScript 클릭도 실패: {js_error}")
-                            continue
+                    if re.search(exact_pattern, span_text):
+                        exact_matches.append((span, span_text))
+                        logger.info(f"정확한 매칭 발견: {span_text}")
+                    elif store_id_11st in span_text:
+                        partial_matches.append((span, span_text))
+                        logger.info(f"부분 매칭 발견: {span_text}")
             
-            logger.error(f"11번가 스토어 ID '{store_id_11st}'를 찾을 수 없습니다")
-            return False
+            # 정확한 매칭 우선 선택
+            target_matches = exact_matches if exact_matches else partial_matches
+            
+            if not target_matches:
+                logger.error(f"11번가 스토어 ID '{store_id_11st}'를 찾을 수 없습니다")
+                return False
+            
+            # 여러 매칭이 있는 경우 경고 로그
+            if len(target_matches) > 1:
+                match_texts = [text for _, text in target_matches]
+                logger.warning(f"여러 매칭 발견: {match_texts}")
+                logger.info(f"첫 번째 매칭 선택: {target_matches[0][1]}")
+            
+            # 선택 실행
+            span, span_text = target_matches[0]
+            logger.info(f"11번가 스토어 선택 시도: {span_text}")
+            
+            # span 요소 클릭 (체크박스가 자동으로 선택됨)
+            try:
+                span.click()
+                time.sleep(1)
+                logger.info("11번가 스토어 span 클릭으로 선택 완료")
+                return True
+            except Exception as click_error:
+                logger.warning(f"span 클릭 실패, JavaScript 클릭 시도: {click_error}")
+                # JavaScript 클릭 시도
+                try:
+                    self.driver.execute_script("arguments[0].click();", span)
+                    time.sleep(1)
+                    logger.info("11번가 스토어 JavaScript 클릭으로 선택 완료")
+                    return True
+                except Exception as js_error:
+                    logger.error(f"JavaScript 클릭도 실패: {js_error}")
+                    return False
             
         except Exception as e:
             logger.error(f"11번가 스토어 선택 실패: {e}")

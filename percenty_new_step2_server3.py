@@ -310,54 +310,32 @@ class PercentyNewStep2Server3:
             # 그룹 선택 후 페이지 로드 대기
             time.sleep(DELAY_MEDIUM)
             
-            # 3. 50개씩 보기 설정 (최적화된 방식)
-            logger.info("3. 50개씩 보기 설정 (최적화)")
+            # 3. 50개씩 보기 설정
+            logger.info("50개씩 보기 설정 시작")
             
-            # 성능 추적 시작
-            items_start_time = time.time()
+            # 50개씩 보기 설정 시도 (최대 3회 재시도)
             items_per_page_success = False
-            
-            try:
-                # 최적화된 50개씩 보기 설정 시도 (3초 타임아웃)
-                items_per_page_success = self.common_dropdown.select_items_per_page_with_verification(
-                    "50", timeout=3
-                )
-                
-                if items_per_page_success:
-                    logger.info("최적화된 50개씩 보기 설정 성공")
-                else:
-                    logger.warning("최적화된 50개씩 보기 설정 실패, 기존 방식으로 재시도")
+            for attempt in range(3):
+                try:
+                    logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
                     
-                    # 기존 방식으로 폴백
-                    dropdown_manager = get_product_search_dropdown_manager(self.driver)
-                    for attempt in range(3):
-                        try:
-                            logger.info(f"기존 방식 50개씩 보기 설정 시도 {attempt + 1}/3")
-                            
-                            if dropdown_manager.select_items_per_page("50"):
-                                logger.info("기존 방식 50개씩 보기 설정 성공")
-                                items_per_page_success = True
-                                break
-                            else:
-                                logger.warning(f"기존 방식 50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
-                                time.sleep(DELAY_MEDIUM)
-                                
-                        except Exception as e:
-                            logger.error(f"기존 방식 50개씩 보기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
-                            time.sleep(DELAY_MEDIUM)
-                            
-            except Exception as e:
-                logger.error(f"50개씩 보기 설정 중 오류: {e}")
-            
-            # 성능 추적 종료
-            items_end_time = time.time()
-            items_duration = items_end_time - items_start_time
-            self.performance_metrics['items_per_page_time'].append(items_duration)
-            logger.info(f"50개씩 보기 설정 소요 시간: {items_duration:.2f}초")
+                    # 50개씩 보기 설정
+                    if self.dropdown_manager.select_items_per_page("50"):
+                        logger.info("50개씩 보기 설정 성공")
+                        items_per_page_success = True
+                        break
+                    else:
+                        logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
+                    
+                    if attempt < 2:
+                        time.sleep(DELAY_MEDIUM)
+                        
+                except Exception as e:
+                    logger.error(f"50개씩 보기 설정 중 오류 (시도 {attempt + 1}/3): {e}")
+                    time.sleep(DELAY_MEDIUM)
             
             if not items_per_page_success:
-                logger.error("50개씩 보기 설정에 실패했습니다.")
-                return False
+                logger.warning("50개씩 보기 설정에 실패했지만 작업을 계속 진행합니다.")
             
             # 설정 완료 후 페이지 로드 대기
             time.sleep(DELAY_MEDIUM)

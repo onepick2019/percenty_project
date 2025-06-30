@@ -1350,6 +1350,66 @@ class ProductSearchDropdownManager:
         except Exception as e:
             logger.error(f"전체 상품 수 확인 중 전체 오류: {e}")
             return -1
+    
+    def select_status_dropdown_fast(self, status_text):
+        """
+        상태 드롭박스에서 특정 상태를 빠르게 선택합니다.
+        간단한 드롭다운 클릭 후 옵션 선택 방식을 사용합니다.
+        
+        Args:
+            status_text (str): 선택할 상태 텍스트 (예: '미업로드')
+            
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        try:
+            logger.info(f"상태 드롭박스에서 '{status_text}' 선택 시작")
+            
+            # 1. 상태 드롭박스 클릭하여 열기
+            dropdown_selector = "//div[contains(@class, 'ant-select') and .//span[contains(text(), '상태 검색')]]"
+            dropdown_element = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, dropdown_selector))
+            )
+            dropdown_element.click()
+            logger.info("상태 드롭박스 클릭")
+            time.sleep(2)  # 드롭다운 옵션이 로드될 시간 확보
+             
+            # 2. 지정된 상태 옵션 선택 (실제 DOM 구조 기반 선택자)
+            option_selectors = [
+                f"//div[contains(@class, 'ant-select-item') and .//div[contains(@class, 'sc-kBRoID') and contains(text(), '{status_text}')]]",
+                f"//div[contains(@class, 'ant-select-item') and contains(text(), '{status_text}')]",
+                f"//div[contains(@class, 'sc-kBRoID') and contains(text(), '{status_text}')]",
+                f"//div[@role='option' and .//div[contains(text(), '{status_text}')]]",
+                f"//div[contains(@class, 'ant-select-item') and text()='{status_text}']",
+                f"//div[@role='option' and text()='{status_text}']"
+            ]
+             
+            option_clicked = False
+            for selector in option_selectors:
+                try:
+                    option_element = WebDriverWait(self.driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    option_element.click()
+                    logger.info(f"'{status_text}' 옵션 선택 완료 (선택자: {selector})")
+                    option_clicked = True
+                    break
+                except TimeoutException:
+                    continue
+             
+            if not option_clicked:
+                logger.error(f"모든 선택자로 '{status_text}' 옵션을 찾을 수 없음")
+                return False
+                 
+            time.sleep(1)
+            return True
+            
+        except TimeoutException:
+            logger.error(f"상태 드롭박스 또는 '{status_text}' 옵션을 찾을 수 없음")
+            return False
+        except Exception as e:
+            logger.error(f"상태 드롭박스 선택 중 오류 발생: {e}")
+            return False
      
 def get_product_search_dropdown_manager(driver):
     """
