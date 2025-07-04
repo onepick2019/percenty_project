@@ -168,7 +168,7 @@ class ProductEditorCore6_Dynamic4:
                 logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
                 
                 # 50개씩 보기 설정
-                if self.dropdown_utils.select_items_per_page("50"):
+                if self.dropdown_utils.select_page_size("50"):
                     logger.info("50개씩 보기 설정 성공")
                     items_per_page_success = True
                     break

@@ -161,6 +161,7 @@ class ProductEditorCore6_Dynamic3:
             bool: 설정 성공 여부
         """
         DELAY_MEDIUM = 2
+        DELAY_AFTER_SUCCESS = 5  # 50개씩 보기 설정 성공 후 지연 시간
         
         items_per_page_success = False
         for attempt in range(3):
@@ -171,6 +172,9 @@ class ProductEditorCore6_Dynamic3:
                 if self.dropdown_manager.select_items_per_page("50"):
                     logger.info("50개씩 보기 설정 성공")
                     items_per_page_success = True
+                    # 50개씩 보기 설정 성공 후 페이지 로딩을 위한 지연
+                    logger.info(f"50개씩 보기 설정 성공 후 {DELAY_AFTER_SUCCESS}초 대기 (페이지 로딩 확보)")
+                    time.sleep(DELAY_AFTER_SUCCESS)
                     break
                 else:
                     logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
@@ -701,7 +705,7 @@ class ProductEditorCore6_Dynamic3:
                     return False
 
                 # 모달창 닫기 후 안정성을 위한 대기 (단축)
-                time.sleep(3)
+                time.sleep(5)
                 
                 # 마지막 회차가 아닌 경우에만 상품 검색 버튼 클릭
                 if round_num < 11:
@@ -744,9 +748,9 @@ class ProductEditorCore6_Dynamic3:
                     logger.info(f"{round_num}회차 확인된 상품 수: {product_count}개")
                 
                 # 3-2. 50개씩 보기 설정 
-                if not self._set_items_per_page_50(): 
-                   logger.error("50개씩 보기 설정 실패") 
-                   return False
+                # if not self._set_items_per_page_50(): 
+                #   logger.error("50개씩 보기 설정 실패") 
+                #   return False
                 
                 # 3-3. 전체선택
                 if not self._select_all_products():
@@ -1291,8 +1295,8 @@ class ProductEditorCore6_Dynamic3:
                 return False
             
             # 모달창 닫기 후 3초 대기
-            # time.sleep(3)
-            # logger.info("모달창 닫기 후 3초 대기 완료")
+            time.sleep(2)
+            logger.info("모달창 닫기 후 2초 대기 완료")
              
             logger.info("동적 삭제 워크플로우 완료")
             return True
@@ -1473,20 +1477,26 @@ class ProductEditorCore6_Dynamic3:
                     logger.error(f"{round_num}회차 전체선택 실패")
                     return False
                 
+                # 전체선택 후 UI 반영을 위한 대기
+                time.sleep(2)
+                
                 # 6. 그룹지정 모달창을 열고 완료 그룹으로 이동
                 if not self._handle_group_assignment(completion_group):
                     logger.error(f"{round_num}회차 그룹 지정 실패")
                     return False
                 
                 logger.info(f"{round_num}회차 상품 이동 완료")
-                
+
+                # 다음 회차를 위한 대기 (상품 수 반영을 위해 충분한 시간 확보)
+                time.sleep(5)
+
                 # 그룹 이동 후 상품검색 버튼 클릭하여 상품 수 갱신
                 logger.info("그룹 이동 후 상품검색 버튼 클릭")
                 if not self._click_product_search_button():
                     logger.warning("상품검색 버튼 클릭 실패, 계속 진행")
                 
-                # 다음 회차를 위한 대기
-                time.sleep(2)
+                # 다음 회차를 위한 대기 (상품 수 반영을 위해 충분한 시간 확보)
+                time.sleep(5)
             
             logger.info(f"그룹 '{group_name}' 상품을 '{completion_group}'으로 이동 완료")
             return True
@@ -1510,7 +1520,16 @@ class ProductEditorCore6_Dynamic3:
             completion_mapping = {
                 '쇼핑몰A1': '완료A1',
                 '쇼핑몰A2': '완료A2', 
-                '쇼핑몰A3': '완료A3'
+                '쇼핑몰A3': '완료A3',
+                '쇼핑몰B1': '완료B1',
+                '쇼핑몰B2': '완료B2', 
+                '쇼핑몰B3': '완료B3',
+                '쇼핑몰C1': '완료C1',
+                '쇼핑몰C2': '완료C2', 
+                '쇼핑몰C3': '완료C3',                 
+                '쇼핑몰D1': '완료D1',
+                '쇼핑몰D2': '완료D2', 
+                '쇼핑몰D3': '완료D3'                
             }
             
             completion_group = completion_mapping.get(group_name)

@@ -1392,9 +1392,20 @@ class PercentyAdvancedGUI:
                         if 'execution_time' in config:
                             self.periodic_time_var.set(config['execution_time'])
                         if 'selected_steps' in config:
-                            for step, enabled in config['selected_steps'].items():
-                                if step in self.periodic_step_vars:
-                                    self.periodic_step_vars[step].set(enabled)
+                            # selected_steps가 리스트 형태인 경우 처리
+                            if isinstance(config['selected_steps'], list):
+                                # 모든 단계를 먼저 False로 설정
+                                for step_var in self.periodic_step_vars.values():
+                                    step_var.set(False)
+                                # 선택된 단계들만 True로 설정
+                                for step in config['selected_steps']:
+                                    if step in self.periodic_step_vars:
+                                        self.periodic_step_vars[step].set(True)
+                            # selected_steps가 딕셔너리 형태인 경우 처리 (기존 방식)
+                            elif isinstance(config['selected_steps'], dict):
+                                for step, enabled in config['selected_steps'].items():
+                                    if step in self.periodic_step_vars:
+                                        self.periodic_step_vars[step].set(enabled)
                         if 'selected_accounts' in config:
                             # 계정 선택 상태 복원 (필요시 구현)
                             pass

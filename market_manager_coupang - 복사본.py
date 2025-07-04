@@ -42,61 +42,32 @@ class CoupangMarketManager:
         Returns:
             bool: 성공 여부
         """
-        max_attempts = 3
-        
-        for attempt in range(max_attempts):
-            try:
-                logger.info(f"쿠팡 API 연동업체를 '퍼센티'로 변경 시작 (시도 {attempt + 1}/{max_attempts})")
-                
-                # 1. 쿠팡 로그인
-                if not self._login_coupang(market_config):
-                    logger.error(f"쿠팡 로그인 실패 (시도 {attempt + 1}/{max_attempts})")
-                    if attempt < max_attempts - 1:
-                        time.sleep(2)
-                        continue
-                    return False
-                
-                # 2. 추가판매정보 페이지로 이동 및 로그인
-                if not self._login_additional_sales_info(market_config):
-                    logger.error(f"추가판매정보 로그인 실패 (시도 {attempt + 1}/{max_attempts})")
-                    if attempt < max_attempts - 1:
-                        time.sleep(2)
-                        continue
-                    return False
-                
-                # 3. 연동업체를 '퍼센티'로 변경 (재시도 로직 포함)
-                if not self._change_integrator("퍼센티"):
-                    logger.error(f"연동업체 변경 실패 (시도 {attempt + 1}/{max_attempts})")
-                    if attempt < max_attempts - 1:
-                        logger.info("[수정] 버튼부터 다시 시작합니다...")
-                        time.sleep(3)  # 재시도 전 대기
-                        continue
-                    return False
-                
-                logger.info(f"쿠팡 API 연동업체를 '퍼센티'로 변경 완료 (시도 {attempt + 1}/{max_attempts})")
-                
-                # 로그아웃 없이 탭만 닫고 메인탭으로 돌아가기
-                try:
-                    self.driver.close()
-                    if len(self.driver.window_handles) > 0:
-                        self.driver.switch_to.window(self.driver.window_handles[0])
-                    logger.info("퍼센티 변경 완료 - 로그아웃 없이 메인탭으로 복귀")
-                except Exception as close_error:
-                    logger.error(f"탭 닫기 실패: {close_error}")
-                
-                return True
-                
-            except Exception as e:
-                logger.error(f"쿠팡 API 연동업체 '퍼센티' 변경 중 오류 발생 (시도 {attempt + 1}/{max_attempts}): {str(e)}")
-                if attempt < max_attempts - 1:
-                    time.sleep(3)
-                    continue
+        try:
+            logger.info("쿠팡 API 연동업체를 '퍼센티'로 변경 시작")
+            
+            # 1. 쿠팡 로그인
+            if not self._login_coupang(market_config):
+                logger.error("쿠팡 로그인 실패")
                 return False
-            finally:
-                # 재시도 로직에서 탭 정리는 성공 시에만 수행하므로 finally에서는 제거
-                pass
-        
-        return False
+            
+            # 2. 추가판매정보 페이지로 이동 및 로그인
+            if not self._login_additional_sales_info(market_config):
+                logger.error("추가판매정보 로그인 실패")
+                return False
+            
+            # 3. 연동업체를 '퍼센티'로 변경
+            if not self._change_integrator("퍼센티"):
+                logger.error("연동업체 변경 실패")
+                return False
+            
+            logger.info("쿠팡 API 연동업체를 '퍼센티'로 변경 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"쿠팡 API 연동업체 '퍼센티' 변경 중 오류 발생: {str(e)}")
+            return False
+        finally:
+            self._close_coupang_tab()
     
     def change_api_integrator_to_nextengine(self, market_config):
         """
@@ -109,74 +80,41 @@ class CoupangMarketManager:
         Returns:
             bool: 성공 여부
         """
-        max_attempts = 3
-        
-        for attempt in range(max_attempts):
-            try:
-                logger.info(f"쿠팡 API 연동업체를 '넥스트엔진'으로 변경 시작 (시도 {attempt + 1}/{max_attempts})")
-                
-                # 새 탭 열기
-                self.driver.execute_script("window.open('', '_blank');")
-                self.driver.switch_to.window(self.driver.window_handles[-1])
-                
-                # 1. 추가판매정보 페이지로 이동 및 로그인 (이미 로그인된 상태에서 진행)
-                if not self._login_additional_sales_info(market_config):
-                    logger.error(f"추가판매정보 로그인 실패 (시도 {attempt + 1}/{max_attempts})")
-                    if attempt < max_attempts - 1:
-                        time.sleep(2)
-                        continue
-                    return False
-                
-                # 2. 연동업체를 '넥스트엔진'으로 변경 (재시도 로직 포함)
-                if not self._change_integrator("넥스트엔진"):
-                    logger.error(f"연동업체 변경 실패 (시도 {attempt + 1}/{max_attempts})")
-                    if attempt < max_attempts - 1:
-                        logger.info("[수정] 버튼부터 다시 시작합니다...")
-                        time.sleep(3)  # 재시도 전 대기
-                        continue
-                    return False
-                
-                logger.info(f"쿠팡 API 연동업체를 '넥스트엔진'으로 변경 완료 (시도 {attempt + 1}/{max_attempts})")
-                
-                # 3. 로그아웃 및 탭 정리
-                try:
-                    # 로그아웃 시도
-                    if not self.logout_coupang():
-                        logger.warning("쿠팡 로그아웃 실패, 탭만 닫고 진행")
-                        # 로그아웃 실패 시에도 탭은 닫기
-                        try:
-                            self.driver.close()
-                            if len(self.driver.window_handles) > 0:
-                                self.driver.switch_to.window(self.driver.window_handles[0])
-                            logger.info("로그아웃 실패했지만 탭 닫기 완료")
-                        except Exception as close_error:
-                            logger.error(f"탭 닫기 실패: {close_error}")
-                    else:
-                        logger.info("로그아웃 및 탭 정리 완료")
-                except Exception as logout_error:
-                    logger.error(f"로그아웃 및 탭 정리 중 오류: {logout_error}")
-                    # 오류 발생 시에도 탭 닫기 시도
-                    try:
-                        self.driver.close()
-                        if len(self.driver.window_handles) > 0:
-                            self.driver.switch_to.window(self.driver.window_handles[0])
-                        logger.info("오류 발생했지만 탭 닫기 완료")
-                    except Exception as close_error:
-                        logger.error(f"오류 후 탭 닫기 실패: {close_error}")
-                
-                return True
-                
-            except Exception as e:
-                logger.error(f"쿠팡 API 연동업체 '넥스트엔진' 변경 중 오류 발생 (시도 {attempt + 1}/{max_attempts}): {str(e)}")
-                if attempt < max_attempts - 1:
-                    time.sleep(3)
-                    continue
+        try:
+            logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 시작")
+            
+            # 새 탭 열기
+            self.driver.execute_script("window.open('', '_blank');")
+            self.driver.switch_to.window(self.driver.window_handles[-1])
+            
+            # 1. 추가판매정보 페이지로 이동 및 로그인 (이미 로그인된 상태에서 진행)
+            if not self._login_additional_sales_info(market_config):
+                logger.error("추가판매정보 로그인 실패")
                 return False
-            finally:
-                # 재시도 로직에서 탭 정리는 성공 시에만 수행하므로 finally에서는 제거
-                pass
-        
-        return False
+            
+            # 2. 연동업체를 '넥스트엔진'으로 변경
+            if not self._change_integrator("넥스트엔진"):
+                logger.error("연동업체 변경 실패")
+                return False
+            
+            logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 완료")
+            
+            # 3. 로그아웃 먼저 실행
+            if not self.logout_coupang():
+                logger.warning("쿠팡 로그아웃 실패, 계속 진행")
+            
+            # 4. 현재 탭 닫고 메인 탭으로 돌아가기
+            self.driver.close()
+            self.driver.switch_to.window(self.driver.window_handles[0])
+            logger.info("추가판매정보 탭을 닫고 메인 탭으로 돌아갔습니다")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"쿠팡 API 연동업체 '넥스트엔진' 변경 중 오류 발생: {str(e)}")
+            return False
+        finally:
+            self._close_coupang_tab()
     
     def logout_coupang(self):
         """
@@ -193,7 +131,8 @@ class CoupangMarketManager:
             current_url = self.driver.current_url
             if "xauth.coupang.com" in current_url or "login" in current_url.lower():
                 logger.info(f"이미 로그아웃된 상태입니다 - 현재 URL: {current_url}")
-                # 탭 닫기는 호출자가 처리하도록 수정
+                # 쿠팡 탭이 있다면 닫기
+                self._close_coupang_tab()
                 return True
         except Exception as e:
             logger.debug(f"현재 URL 확인 중 오류: {e}")
@@ -229,8 +168,8 @@ class CoupangMarketManager:
                         return False
                 
                 logger.info(f"쿠팡 로그아웃 성공 (시도 {attempt + 1}/{max_attempts})")
-                # 로그아웃 성공 후 탭 닫기는 호출자가 처리하도록 수정
-                # 탭 닫기를 여기서 하면 중복 닫기가 발생할 수 있음
+                # 로그아웃 성공 후 쿠팡 탭 닫기
+                self._close_coupang_tab()
                 return True
                 
             except Exception as e:
@@ -618,19 +557,10 @@ class CoupangMarketManager:
             
             time.sleep(3)  # 자동완성 목록이 나타날 시간 대기
             
-            # 자동완성 목록에서 해당 업체명 선택 (정확한 텍스트 매칭 강화)
+            # 자동완성 목록에서 해당 업체명 선택 (DOM 기반 정확한 선택자만 사용)
             autocomplete_selected = False
             
-            # 정확한 키워드 매핑 설정
-            keyword_mapping = {
-                '퍼센티': ['퍼센티', '타입비', 'TYPEB'],
-                '넥스트엔진': ['넥스트엔진', '하미글로벌', 'NEXT ENGINE']
-            }
-            
-            search_keywords = keyword_mapping.get(integrator_name, [integrator_name])
-            logger.info(f"'{integrator_name}' 검색 키워드: {search_keywords}")
-            
-            # 방법 1: 자동완성 목록에서 정확한 텍스트 매칭으로 찾기
+            # 방법 1: 자동완성 목록에서 '퍼센티' 찾기
             try:
                 # 자동완성 목록 대기
                 autocomplete_list = WebDriverWait(self.driver, 10).until(
@@ -638,104 +568,31 @@ class CoupangMarketManager:
                 )
                 logger.info("자동완성 목록 발견")
                 
-                # 자동완성 목록의 모든 항목 가져오기
-                autocomplete_items = self.driver.find_elements(By.CSS_SELECTOR, ".ui-autocomplete li")
-                logger.info(f"자동완성 항목 수: {len(autocomplete_items)}")
-                
-                # 각 항목의 텍스트 로깅
-                for i, item in enumerate(autocomplete_items):
-                    try:
-                        item_text = item.text.strip()
-                        logger.info(f"자동완성 항목 {i+1}: '{item_text}'")
-                    except Exception as e:
-                        logger.warning(f"자동완성 항목 {i+1} 텍스트 읽기 실패: {e}")
-                
-                # 정확한 키워드로 매칭하여 선택
-                target_item = None
-                for keyword in search_keywords:
-                    for item in autocomplete_items:
-                        try:
-                            item_text = item.text.strip()
-                            # 정확한 매칭 또는 포함 관계 확인
-                            if (keyword.lower() in item_text.lower() or 
-                                item_text.lower() in keyword.lower()):
-                                target_item = item
-                                logger.info(f"매칭된 항목 발견: '{item_text}' (키워드: '{keyword}')")
-                                break
-                        except Exception as e:
-                            logger.warning(f"항목 텍스트 확인 실패: {e}")
-                    
-                    if target_item:
-                        break
-                
-                if target_item and target_item.is_displayed():
-                    # JavaScript 클릭으로 안정적 선택
-                    self.driver.execute_script("arguments[0].click();", target_item)
-                    logger.info(f"자동완성에서 '{target_item.text.strip()}' 선택 완료")
-                    autocomplete_selected = True
-                else:
-                    logger.warning(f"'{integrator_name}' 키워드와 매칭되는 항목을 찾을 수 없음")
+                # '퍼센티' 항목 찾기
+                integrator_option = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, f"//li[contains(text(), '{integrator_name}')]"))
+                )
+                integrator_option.click()
+                logger.info(f"자동완성에서 '{integrator_name}' 선택 완료")
+                autocomplete_selected = True
                         
             except Exception as e:
                 logger.warning(f"자동완성 목록에서 '{integrator_name}' 찾기 실패: {e}")
             
-            # 방법 2: 키워드 재입력 후 정확한 선택
+            # 방법 2: 키보드 네비게이션으로 선택
             if not autocomplete_selected:
                 try:
-                    logger.info("키워드 재입력 후 정확한 선택 시도")
-                    
-                    # 입력창 다시 포커스
-                    integrator_input.click()
+                    # 아래 화살표로 첫 번째 항목 선택 후 엔터
+                    integrator_input.send_keys(Keys.ARROW_DOWN)
                     time.sleep(0.5)
-                    
-                    # 기존 텍스트 삭제
-                    integrator_input.send_keys(Keys.CONTROL + "a")
-                    integrator_input.send_keys(Keys.DELETE)
-                    time.sleep(0.3)
-                    
-                    # 더 구체적인 키워드로 재입력
-                    if integrator_name == '넥스트엔진':
-                        search_text = '넥스트엔진'
-                    elif integrator_name == '퍼센티':
-                        search_text = '퍼센티'
-                    else:
-                        search_text = integrator_name
-                    
-                    integrator_input.send_keys(search_text)
-                    time.sleep(2)  # 자동완성 목록 업데이트 대기
-                    
-                    # 다시 자동완성 목록에서 선택 시도
-                    autocomplete_items = self.driver.find_elements(By.CSS_SELECTOR, ".ui-autocomplete li")
-                    for item in autocomplete_items:
-                        try:
-                            item_text = item.text.strip()
-                            if any(keyword.lower() in item_text.lower() for keyword in search_keywords):
-                                self.driver.execute_script("arguments[0].click();", item)
-                                logger.info(f"재시도로 '{item_text}' 선택 완료")
-                                autocomplete_selected = True
-                                break
-                        except Exception as e:
-                            logger.warning(f"재시도 항목 선택 실패: {e}")
-                            
+                    integrator_input.send_keys(Keys.ENTER)
+                    logger.info("키보드로 자동완성 선택 완료")
+                    autocomplete_selected = True
                 except Exception as e:
-                    logger.warning(f"키워드 재입력 선택 실패: {e}")
+                    logger.warning(f"키보드 자동완성 선택 실패: {e}")
             
             if not autocomplete_selected:
-                 logger.warning("자동완성 선택 실패 - 전체 프로세스 재시도 필요")
-                 return False  # 재시도를 위해 False 반환
-            
-            # 선택 후 입력창 값 재확인
-            try:
-                time.sleep(1)
-                final_value = integrator_input.get_attribute("value")
-                logger.info(f"최종 입력창 값: '{final_value}'")
-                
-                # 선택된 값이 예상과 다른 경우 경고
-                if final_value and not any(keyword.lower() in final_value.lower() for keyword in search_keywords):
-                    logger.warning(f"선택된 값이 예상과 다름: '{final_value}' (예상 키워드: {search_keywords})")
-                    
-            except Exception as e:
-                logger.warning(f"최종 값 확인 실패: {e}")
+                logger.warning("모든 자동완성 선택 방법 실패")
             
             # 자동완성 선택 후 충분한 대기 시간 (UI 업데이트 완료 대기)
             logger.info("자동완성 선택 후 UI 업데이트 대기 중...")

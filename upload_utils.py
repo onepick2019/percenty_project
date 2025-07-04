@@ -561,8 +561,8 @@ class UploadUtils:
         try:
             logger.info("업로드 완료 대기 시작")
             
-            # 업로드 완료 상태 체크 (최대 1시간 대기)
-            max_wait_time = 3600  # 1시간
+            # 업로드 완료 상태 체크 (최대 20분 대기)
+            max_wait_time = 1200  # 20분간
             check_interval = 3   # 3초마다 체크
             elapsed_time = 0
             
@@ -623,7 +623,9 @@ class UploadUtils:
             
             if elapsed_time >= max_wait_time:
                 logger.warning("업로드 완료 대기 시간 초과")
-                return False
+                # 타임아웃 시에도 모달창을 닫아서 워크플로우가 계속 진행되도록 함
+                logger.info("타임아웃 발생, 강제로 모달창 닫기 시도")
+                return self._force_close_upload_modal()
             
             # 업로드 완료 후 잠시 대기
             logger.info("업로드 완료 확인됨, 모달창 닫기 준비")
@@ -740,6 +742,81 @@ class UploadUtils:
             
         except Exception as e:
             logger.error(f"마켓 선택 중 오류: {e}")
+            return False
+    
+    def _force_close_upload_modal(self) -> bool:
+        """
+        타임아웃 발생 시 강제로 업로드 모달창 닫기
+        업로드가 완료되지 않은 상태에서도 모달창을 닫아 워크플로우 진행
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("강제 모달창 닫기 시도 (타임아웃 발생)")
+            
+            # 타임아웃 시 사용할 닫기 버튼 선택자들 (업로드 미완료 상태)
+            timeout_close_selectors = [
+                "//button[contains(@class, 'ant-btn-dangerous') and .//span[text()='닫기']]",  # 사용자 제공 선택자
+                "//button[@type='button' and contains(@class, 'ant-btn') and .//span[text()='닫기']]",
+                "//div[contains(@style, 'border-top: 1px solid')]//button[.//span[text()='닫기']]",
+                "//button[contains(@class, 'ant-btn-default') and contains(@class, 'ant-btn-dangerous')]",
+                "//button[.//span[text()='닫기']]",
+                "//button[text()='닫기']"
+            ]
+            
+            for selector in timeout_close_selectors:
+                try:
+                    close_button = WebDriverWait(self.driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    
+                    close_button.click()
+                    logger.info(f"강제 모달창 닫기 버튼 클릭 성공: {selector}")
+                    time.sleep(1)
+                    return True
+                    
+                except TimeoutException:
+                    continue
+                except Exception as e:
+                    logger.warning(f"강제 닫기 버튼 클릭 시도 중 오류: {e}")
+                    continue
+            
+            # 일반 닫기 버튼도 시도
+            general_close_selectors = [
+                "//button[contains(@class, 'ant-modal-close')]",
+                "//button[@aria-label='Close']",
+                "//span[@aria-label='close']/parent::button",
+                ".ant-modal-close"
+            ]
+            
+            for selector in general_close_selectors:
+                try:
+                    if selector.startswith('//'):
+                        close_button = WebDriverWait(self.driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, selector))
+                        )
+                    else:
+                        close_button = WebDriverWait(self.driver, 3).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                        )
+                    
+                    close_button.click()
+                    logger.info(f"일반 모달창 닫기 버튼 클릭 성공: {selector}")
+                    time.sleep(1)
+                    return True
+                    
+                except TimeoutException:
+                    continue
+                except Exception as e:
+                    logger.warning(f"일반 닫기 버튼 클릭 시도 중 오류: {e}")
+                    continue
+            
+            logger.error("강제 모달창 닫기 실패: 모든 닫기 버튼을 찾을 수 없습니다")
+            return False
+            
+        except Exception as e:
+            logger.error(f"강제 모달창 닫기 중 오류: {e}")
             return False
     
     def close_upload_modal(self) -> bool:

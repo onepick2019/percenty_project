@@ -18,26 +18,56 @@ from typing import Dict, List, Optional, Union, Tuple
 # 루트 디렉토리를 경로에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-# 기존 모듈들 임포트 (루트에서)
-from product_editor_core6_dynamic_1 import ProductEditorCore6_Dynamic1
+# 로거 설정
+logger = logging.getLogger(__name__)
 
-from browser_core import BrowserCore
-from login_percenty import PercentyLogin
-from menu_clicks import MenuClicks
-from coordinates.coordinates_all import MENU
-from timesleep import DELAY_STANDARD, DELAY_SHORT
-from human_delay import HumanLikeDelay
-from ui_elements import UI_ELEMENTS
-from click_utils import smart_click
-from account_manager import AccountManager
+# 기존 모듈들 임포트 (루트에서)
+try:
+    from product_editor_core6_dynamic_1 import ProductEditorCore6_Dynamic1
+    logger.info("ProductEditorCore6_Dynamic1 임포트 성공")
+except Exception as e:
+    logger.error(f"ProductEditorCore6_Dynamic1 임포트 실패: {e}")
+    raise
+
+try:
+    from browser_core import BrowserCore
+    from login_percenty import PercentyLogin
+    from menu_clicks import MenuClicks
+    from coordinates.coordinates_all import MENU
+    from timesleep import DELAY_STANDARD, DELAY_SHORT
+    from human_delay import HumanLikeDelay
+    from ui_elements import UI_ELEMENTS
+    from click_utils import smart_click
+    from account_manager import AccountManager
+    logger.info("기본 모듈들 임포트 성공")
+except Exception as e:
+    logger.error(f"기본 모듈들 임포트 실패: {e}")
+    raise
 
 # 공통 함수들 임포트
-from core.common.modal_handler import handle_post_login_modals, hide_channel_talk, close_modal_dialogs
-from core.common.navigation_handler import navigate_to_ai_sourcing, navigate_to_group_management, switch_to_non_group_view
-from core.common.product_handler import check_product_count, check_toggle_state, toggle_product_view
-from core.common.ui_handler import periodic_ui_cleanup, ensure_clean_ui_before_action
+try:
+    from core.common.modal_handler import handle_post_login_modals, hide_channel_talk, close_modal_dialogs
+    logger.info("modal_handler 모듈 임포트 성공")
+except Exception as e:
+    logger.error(f"modal_handler 모듈 임포트 실패: {e}")
+    raise
 
-logger = logging.getLogger(__name__)
+# percenty_utils에서 통합 모달 처리 함수 임포트
+try:
+    from percenty_utils import hide_channel_talk_and_modals
+    logger.info("percenty_utils 모듈 임포트 성공")
+except Exception as e:
+    logger.error(f"percenty_utils 모듈 임포트 실패: {e}")
+    raise
+
+try:
+    from core.common.navigation_handler import navigate_to_ai_sourcing, navigate_to_group_management, switch_to_non_group_view
+    from core.common.product_handler import check_product_count, check_toggle_state, toggle_product_view
+    from core.common.ui_handler import periodic_ui_cleanup, ensure_clean_ui_before_action
+    logger.info("core.common 모듈들 임포트 성공")
+except Exception as e:
+    logger.error(f"core.common 모듈들 임포트 실패: {e}")
+    raise
 
 class Step6_1Core:
     """
@@ -156,11 +186,26 @@ class Step6_1Core:
                 result['error_message'] = '로그인 실패'
                 return result
             
+            logger.info("로그인 완료 후 모달 처리 시작")
+            
+            # 브라우저 상태 확인
+            try:
+                current_url = self.driver.current_url
+                logger.info(f"현재 브라우저 URL: {current_url}")
+                window_handles = self.driver.window_handles
+                logger.info(f"현재 열린 창 수: {len(window_handles)}")
+            except Exception as e:
+                logger.error(f"브라우저 상태 확인 중 오류: {e}")
+                result['error_message'] = '브라우저 상태 확인 실패'
+                return result
+            
             # 모달 처리
             self._handle_modals()
             
             # 6-1단계 핵심 로직 실행
+            logger.info("6-1단계 핵심 로직 실행 시작")
             processed_count = self._execute_core_logic(account_id, quantity)
+            logger.info(f"6-1단계 핵심 로직 실행 완료 - 처리된 수량: {processed_count}")
             
             result['success'] = True
             result['processed_count'] = processed_count
@@ -169,6 +214,8 @@ class Step6_1Core:
             
         except Exception as e:
             logger.error(f"6-1단계 실행 중 오류: {e}")
+            import traceback
+            logger.error(f"6-1단계 실행 상세 오류: {traceback.format_exc()}")
             result['error_message'] = str(e)
             
         finally:
@@ -232,19 +279,30 @@ class Step6_1Core:
         모달 처리
         """
         try:
-            # 로그인 후 모달 처리
-            handle_post_login_modals(self.driver)
+            logger.info("모달 처리 시작")
             
-            # 채널톡 숨기기
-            hide_channel_talk(self.driver)
+            # 로그인 후 모달 처리
+            logger.info("로그인 후 모달 처리 시작")
+            handle_post_login_modals(self.driver)
+            logger.info("로그인 후 모달 처리 완료")
+            
+            # 채널톡 및 로그인 모달창 통합 처리
+            logger.info("채널톡 및 로그인 모달창 통합 처리 시작")
+            hide_channel_talk_and_modals(self.driver, log_prefix="6-1단계")
+            logger.info("채널톡 및 로그인 모달창 통합 처리 완료")
             
             # 기타 모달 닫기
+            logger.info("기타 모달 닫기 시작")
             close_modal_dialogs(self.driver)
+            logger.info("기타 모달 닫기 완료")
             
             logger.info("모달 처리 완료")
             
         except Exception as e:
             logger.error(f"모달 처리 중 오류: {e}")
+            import traceback
+            logger.error(f"모달 처리 상세 오류: {traceback.format_exc()}")
+            # 모달 처리 실패는 치명적이지 않으므로 계속 진행
     
     def _execute_core_logic(self, account_id: str, quantity: int) -> int:
         """
@@ -258,11 +316,17 @@ class Step6_1Core:
             int: 처리된 수량
         """
         try:
+            logger.info(f"6-1단계 핵심 로직 시작 - 계정: {account_id}, 수량: {quantity}")
+            
             # ProductEditorCore6_Dynamic1 인스턴스 생성
+            logger.info("ProductEditorCore6_Dynamic1 인스턴스 생성 시작")
             core_processor = ProductEditorCore6_Dynamic1(self.driver, account_id)
+            logger.info("ProductEditorCore6_Dynamic1 인스턴스 생성 완료")
             
             # 마켓 설정 로드
+            logger.info("마켓 설정 로드 시작")
             market_configs = core_processor.load_market_config_from_excel()
+            logger.info(f"마켓 설정 로드 완료 - {len(market_configs) if market_configs else 0}개 설정")
             
             if not market_configs:
                 logger.warning(f"계정 {account_id}에 대한 마켓 설정이 없습니다")
@@ -284,11 +348,11 @@ class Step6_1Core:
                     # 동적 업로드 처리 실행
                     result = core_processor.execute_dynamic_upload_workflow()
                     
-                    if result.get('success', False):
-                        processed_count += result.get('processed_count', 0)
-                        logger.info(f"그룹 '{group_name}' 처리 완료: {result.get('processed_count', 0)}개")
+                    if result:  # bool 값으로 처리
+                        processed_count += 1  # 성공한 그룹 수 카운트
+                        logger.info(f"그룹 '{group_name}' 처리 완료")
                     else:
-                        logger.error(f"그룹 '{group_name}' 처리 실패: {result.get('error_message', '')}")
+                        logger.error(f"그룹 '{group_name}' 처리 실패")
                     
                     # 다음 그룹 처리 전 대기
                     delay_time = self.delay.get_delay('medium')
@@ -296,12 +360,16 @@ class Step6_1Core:
                     
                 except Exception as e:
                     logger.error(f"그룹 처리 중 오류: {e}")
+                    import traceback
+                    logger.error(f"그룹 '{group_name}' 처리 상세 오류: {traceback.format_exc()}")
                     continue
             
             return processed_count
             
         except Exception as e:
             logger.error(f"6-1단계 핵심 로직 실행 중 오류: {e}")
+            import traceback
+            logger.error(f"6-1단계 핵심 로직 상세 오류: {traceback.format_exc()}")
             return 0
     
     def stop_execution(self):
