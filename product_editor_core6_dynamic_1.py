@@ -23,6 +23,7 @@ from upload_utils import UploadUtils
 from market_manager import MarketManager
 from market_utils import MarketUtils
 from market_manager_cafe24 import MarketManagerCafe24
+from modal_blocker import press_escape_key
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ class ProductEditorCore6_Dynamic1:
         
         # 스마트스토어 API 키 설정 상태 추적
         self.smartstore_api_configured = False
+        
+        # 퍼센티 확장 프로그램 설치 상태 추적 (최초 1회만 설치)
+        self.percenty_extension_installed = False
         
         logger.info(f"ProductEditorCore6_Dynamic1 초기화 완료 - 계정: {account_id}")
     
@@ -150,6 +154,8 @@ class ProductEditorCore6_Dynamic1:
             
         except Exception as e:
             logger.error(f"마켓 설정 정보 로드 중 오류 발생: {e}")
+            import traceback
+            logger.error(f"마켓 설정 로드 상세 오류: {traceback.format_exc()}")
             return []
     
     def _set_items_per_page_50(self):
@@ -160,6 +166,7 @@ class ProductEditorCore6_Dynamic1:
             bool: 설정 성공 여부
         """
         DELAY_MEDIUM = 2
+        DELAY_AFTER_SUCCESS = 5  # 50개씩 보기 설정 후 페이지 로딩 대기 시간
         
         items_per_page_success = False
         for attempt in range(3):
@@ -167,9 +174,13 @@ class ProductEditorCore6_Dynamic1:
                 logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
                 
                 # 50개씩 보기 설정
-                if self.dropdown_utils.select_items_per_page("50"):
+                if self.dropdown_utils.select_page_size("50"):
                     logger.info("50개씩 보기 설정 성공")
                     items_per_page_success = True
+                    
+                    # 50개씩 보기 설정 후 페이지 로딩을 위한 충분한 대기 시간
+                    logger.info(f"50개씩 보기 설정 완료 후 페이지 로딩 대기 ({DELAY_AFTER_SUCCESS}초)")
+                    time.sleep(DELAY_AFTER_SUCCESS)
                     break
                 else:
                     logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
@@ -220,6 +231,8 @@ class ProductEditorCore6_Dynamic1:
             # 3-1. 11번가 API KEY 입력
             api_key_11st = market_config.get('11store_api', '')
             if api_key_11st:
+                # 구글 익스텐션 설치 성공 모달창 닫기
+                self._detect_and_close_modal()
                 if self._input_11st_api_key(api_key_11st):
                     logger.info("11번가 API KEY 입력 성공")
                     api_setup_success = True
@@ -232,6 +245,8 @@ class ProductEditorCore6_Dynamic1:
             logger.info(f"톡스토어 API 키 확인: API키={talkstore_api_key[:10] if talkstore_api_key else 'N/A'}..., URL={talkstore_store_url[:30] if talkstore_store_url else 'N/A'}...")
             
             if talkstore_api_key and talkstore_store_url:
+                # 구글 익스텐션 설치 성공 모달창 닫기
+                self._detect_and_close_modal()
                 logger.info("톡스토어 API 키 입력 시도 시작")
                 if self._input_talkstore_api_keys(talkstore_api_key, talkstore_store_url):
                     logger.info("톡스토어 API 키 입력 성공")
@@ -246,6 +261,8 @@ class ProductEditorCore6_Dynamic1:
             logger.info(f"11번가-글로벌 API 키 확인: {global_11st_api_key[:10] if global_11st_api_key else 'N/A'}...")
             
             if global_11st_api_key:
+                # 구글 익스텐션 설치 성공 모달창 닫기
+                self._detect_and_close_modal()
                 logger.info("11번가-글로벌 API 키 입력 시도 시작")
                 if self._input_11st_global_api_key(global_11st_api_key):
                     logger.info("11번가-글로벌 API 키 입력 성공")
@@ -261,6 +278,8 @@ class ProductEditorCore6_Dynamic1:
             logger.info(f"옥션/G마켓 API 키 확인: 옥션={auction_api_key[:10] if auction_api_key else 'N/A'}..., G마켓={gmarket_api_key[:10] if gmarket_api_key else 'N/A'}...")
             
             if auction_api_key and gmarket_api_key:
+                # 구글 익스텐션 설치 성공 모달창 닫기
+                self._detect_and_close_modal()
                 logger.info("옥션/G마켓 API 키 입력 시도 시작")
                 if self._input_auction_gmarket_api_keys(auction_api_key, gmarket_api_key):
                     logger.info("옥션/G마켓 API 키 입력 성공")
@@ -275,6 +294,25 @@ class ProductEditorCore6_Dynamic1:
             logger.info(f"스마트스토어 API 키 확인: {smartstore_api_key[:10] if smartstore_api_key else 'N/A'}...")
             
             if smartstore_api_key:
+                # 스마트스토어 API 키가 있는 경우 퍼센티 확장 프로그램 설치 (최초 1회만)
+                if not self.percenty_extension_installed:
+                    logger.info("스마트스토어 API 키가 있어 퍼센티 확장 프로그램 설치를 진행합니다 (최초 1회)")
+                    if self._install_percenty_extension():
+                        self.percenty_extension_installed = True
+                        logger.info("퍼센티 확장 프로그램 설치 완료")
+                        # 확장 프로그램 설치 후 안정화를 위한 2분 지연
+                        logger.info("확장 프로그램 안정화를 위해 2분 대기합니다...")
+                        time.sleep(120)
+                        logger.info("2분 대기 완료, 다음 단계를 진행합니다")
+                    else:
+                        logger.warning("퍼센티 확장 프로그램 설치 실패, 계속 진행합니다")
+                else:
+                    logger.info("퍼센티 확장 프로그램이 이미 설치되어 있어 건너뜁니다")
+                
+                # 구글 익스텐션 설치 성공 모달창 닫기
+                # 새로 추가한 ESC 키로 확장프로그램 모달창 닫기 성공함. 좌표필요시 1180 485
+                
+                self._detect_and_close_modal()
                 logger.info("스마트스토어 API 키 입력 시도 시작")
                 if self._input_smartstore_api_key(smartstore_api_key):
                     logger.info("스마트스토어 API 키 입력 성공")
@@ -514,11 +552,17 @@ class ProductEditorCore6_Dynamic1:
             bool: 모달창을 감지하고 닫았는지 여부
         """
         try:
-            # 채널톡 팝업 모달창 감지 및 닫기 시도
+            # 1. 먼저 ESC 키로 모달창 닫기 시도
+            if press_escape_key(self.driver):
+                logger.info("ESC 키로 모달창 닫기 성공")
+                time.sleep(1)  # 모달창 닫힘 대기
+                return True
+            
+            # 2. 채널톡 팝업 모달창 감지 및 닫기 시도
             if self._detect_and_close_channel_talk_popup():
                 return True
                 
-            # 기존 모달창 감지 (퍼센티 상담 팝업)
+            # 3. 기존 모달창 감지 (퍼센티 상담 팝업)
             modal_selectors = [
                 "div[class*='PCFullscreenPopupContent']",
                 "div[role='button'][class*='PCFullscreenPopupContent']",
@@ -1461,7 +1505,7 @@ class ProductEditorCore6_Dynamic1:
             logger.info(f"상품 업로드 워크플로우 시작: {group_name}")
             
             # 1-4단계를 2회 반복
-            for round_num in range(1, 11):  # 1회차, 2회차
+            for round_num in range(1, 3):  # 1회차, 2회차
                 logger.info(f"업로드 {round_num}회차 시작")
                 
                 # 1. 상품 수 확인 (0개인 경우 스킵)
@@ -1497,7 +1541,7 @@ class ProductEditorCore6_Dynamic1:
                 time.sleep(5)
                 
                 # 2회차가 아닌 경우에만 새로고침 버튼 클릭
-                if round_num < 11:
+                if round_num < 3:
                     logger.info(f"{round_num}회차 완료, 새로고침 버튼 클릭 후 다음 회차 진행")
                     try:
                         # 새로고침 버튼 클릭
@@ -1689,7 +1733,10 @@ class ProductEditorCore6_Dynamic1:
             
         except Exception as e:
             logger.error(f"동적 업로드 워크플로우 중 오류 발생: {e}")
-            return False
+            import traceback
+            logger.error(f"상세 오류 정보: {traceback.format_exc()}")
+            # 예외를 다시 발생시켜 상위에서 처리할 수 있도록 함
+            raise e
     
     def _update_smartstore_delivery_info(self):
         """

@@ -585,7 +585,7 @@ class PercentyAdvancedGUI:
         
         # 계정 간 대기시간 변수 초기화
         if not hasattr(self, 'periodic_account_delay_var'):
-            self.periodic_account_delay_var = tk.StringVar(value="120")
+            self.periodic_account_delay_var = tk.StringVar(value="300")
         
         delay_entry = ttk.Entry(time_frame, textvariable=self.periodic_account_delay_var, width=8)
         delay_entry.pack(side=tk.LEFT, padx=(0, 5))
@@ -1392,17 +1392,28 @@ class PercentyAdvancedGUI:
                         if 'execution_time' in config:
                             self.periodic_time_var.set(config['execution_time'])
                         if 'selected_steps' in config:
-                            for step, enabled in config['selected_steps'].items():
-                                if step in self.periodic_step_vars:
-                                    self.periodic_step_vars[step].set(enabled)
+                            # selected_steps가 리스트 형태인 경우 처리
+                            if isinstance(config['selected_steps'], list):
+                                # 모든 단계를 먼저 False로 설정
+                                for step_var in self.periodic_step_vars.values():
+                                    step_var.set(False)
+                                # 선택된 단계들만 True로 설정
+                                for step in config['selected_steps']:
+                                    if step in self.periodic_step_vars:
+                                        self.periodic_step_vars[step].set(True)
+                            # selected_steps가 딕셔너리 형태인 경우 처리 (기존 방식)
+                            elif isinstance(config['selected_steps'], dict):
+                                for step, enabled in config['selected_steps'].items():
+                                    if step in self.periodic_step_vars:
+                                        self.periodic_step_vars[step].set(enabled)
                         if 'selected_accounts' in config:
                             # 계정 선택 상태 복원 (필요시 구현)
                             pass
                         if 'account_delay' in config:
                             self.periodic_account_delay_var.set(str(config['account_delay']))
                         else:
-                            # 기본값 120초 설정
-                            self.periodic_account_delay_var.set("120")
+                            # 기본값 300초 설정
+                            self.periodic_account_delay_var.set("300")
                         logger.info("주기적 실행 설정을 로드했습니다.")
             else:
                 logger.info("주기적 실행 설정 파일이 없습니다. 기본값을 사용합니다.")

@@ -37,6 +37,8 @@ class ProductEditorCore6_Dynamic2:
         
         # 유틸리티 클래스 초기화
         self.dropdown_utils = get_product_search_dropdown_manager(driver)
+        self.dropdown_manager = get_product_search_dropdown_manager(driver)  # 최적화된 메서드용
+        self.product_search_dropdown = get_product_search_dropdown_manager(driver)  # 상품 검색용은 별도 유지
         self.upload_utils = UploadUtils(driver)
         self.market_utils = MarketUtils(driver, logger)
         self.market_manager = MarketManager(driver)
@@ -160,6 +162,7 @@ class ProductEditorCore6_Dynamic2:
             bool: 설정 성공 여부
         """
         DELAY_MEDIUM = 2
+        DELAY_AFTER_SUCCESS = 5  # 50개씩 보기 설정 성공 후 지연 시간
         
         items_per_page_success = False
         for attempt in range(3):
@@ -167,9 +170,12 @@ class ProductEditorCore6_Dynamic2:
                 logger.info(f"50개씩 보기 설정 시도 {attempt + 1}/3")
                 
                 # 50개씩 보기 설정
-                if self.dropdown_utils.select_items_per_page("50"):
+                if self.dropdown_manager.select_items_per_page("50"):
                     logger.info("50개씩 보기 설정 성공")
                     items_per_page_success = True
+                    # 50개씩 보기 설정 성공 후 페이지 로딩을 위한 지연
+                    logger.info(f"50개씩 보기 설정 성공 후 {DELAY_AFTER_SUCCESS}초 대기 (페이지 로딩 확보)")
+                    time.sleep(DELAY_AFTER_SUCCESS)
                     break
                 else:
                     logger.warning(f"50개씩 보기 설정 실패 (시도 {attempt + 1}/3)")
@@ -1484,11 +1490,11 @@ class ProductEditorCore6_Dynamic2:
             for round_num in range(1, 6):  # 1회차, 2회차
                 logger.info(f"업로드 {round_num}회차 시작")
                 
-                # 1. 상품 수 확인 (0개인 경우 스킵)
+                # 1. 상품 수 확인 (0개인 경우 반복 업로드 스킵)
                 product_count = self._check_product_count()
                 if product_count == 0:
-                    logger.info(f"그룹 '{group_name}'에 상품이 0개이므로 워크플로우를 스킵합니다")
-                    return True
+                    logger.info(f"그룹 '{group_name}'에 상품이 0개이므로 반복 업로드를 스킵하고 후속 플로우를 진행합니다")
+                    break  # 반복문만 종료하고 후속 플로우는 계속 진행
                 elif product_count == -1:
                     logger.warning(f"{round_num}회차 상품 수 확인 실패, 계속 진행합니다")
                 else:
@@ -1516,21 +1522,20 @@ class ProductEditorCore6_Dynamic2:
                 # 모달창 닫기 후 안정성을 위한 대기
                 time.sleep(5)
                 
-                # 2회차가 아닌 경우에만 새로고침 버튼 클릭
+                # 2회차가 아닌 경우에만 상품검색 버튼 클릭
                 if round_num < 6:
-                    logger.info(f"{round_num}회차 완료, 새로고침 버튼 클릭 후 다음 회차 진행")
+                    logger.info(f"{round_num}회차 완료, 상품검색 버튼 클릭 후 다음 회차 진행")
                     try:
-                        # 새로고침 버튼 클릭
-                        refresh_button = WebDriverWait(self.driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'ant-btn-primary') and contains(@class, 'ant-btn-background-ghost')]//span[text()='새로고침']/parent::button"))
-                        )
-                        refresh_button.click()
-                        logger.info("새로고침 버튼 클릭 완료")
-                        time.sleep(3)  # 새로고침 후 대기
+                        # 상품검색 버튼 클릭
+                        if self._click_product_search_button():
+                            logger.info("상품검색 버튼 클릭 완료")
+                        else:
+                            logger.error("상품검색 버튼 클릭 실패")
+                        time.sleep(3)  # 검색 후 대기
                     except Exception as e:
-                        logger.error(f"새로고침 버튼 클릭 실패: {e}")
-                        # 화면 새로고침은 선택된 그룹이 유지되지 않으므로 사용하지 않음
+                        logger.error(f"상품검색 버튼 클릭 실패: {e}")
             
+            """
             # 6. 스마트스토어 배송정보 변경 (2회 업로드 완료 후)
             if not self._update_smartstore_delivery_info():
                 logger.warning("스마트스토어 배송정보 변경에 실패했지만 계속 진행합니다")
@@ -1538,37 +1543,41 @@ class ProductEditorCore6_Dynamic2:
             # 7. 카페24 로그인해서 11번가 등록자료 가져오기
             if not self._import_11st_products_from_cafe24():
                 logger.warning("카페24 11번가 상품 가져오기에 실패했지만 계속 진행합니다")
+            """
             
-            # 8. 쿠팡 API 연동업체를 '넥스트엔진'으로 변경
+            # 8. 쿠팡 API 연동업체를 '넥스트엔진'으로 변경 및 로그아웃
             coupang_id = market_config.get('coupang_id', '')
             coupang_password = market_config.get('coupang_password', '')
             
             if coupang_id and coupang_password:
-                logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 시작")
+                logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 및 로그아웃 시작")
                 try:
+                    # 하나의 CoupangMarketManager 인스턴스로 연동업체 변경과 로그아웃을 순차 처리
                     coupang_manager = CoupangMarketManager(self.driver, self.wait)
+                    
+                    # 연동업체 변경
                     if coupang_manager.change_api_integrator_to_nextengine(market_config):
                         logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 완료")
+                        
+                        # 연동업체 변경 성공 후 로그아웃 진행
+                        logger.info("쿠팡 로그아웃 시작")
+                        if coupang_manager.logout_coupang():
+                            logger.info("쿠팡 로그아웃 완료")
+                        else:
+                            logger.warning("쿠팡 로그아웃에 실패했지만 계속 진행합니다")
                     else:
                         logger.warning("쿠팡 API 연동업체 '넥스트엔진' 변경에 실패했지만 계속 진행합니다")
+                        # 연동업체 변경 실패 시에도 로그아웃 시도
+                        logger.info("연동업체 변경 실패했지만 쿠팡 로그아웃 시도")
+                        if coupang_manager.logout_coupang():
+                            logger.info("쿠팡 로그아웃 완료")
+                        else:
+                            logger.warning("쿠팡 로그아웃에 실패했지만 계속 진행합니다")
+                            
                 except Exception as e:
-                    logger.error(f"쿠팡 API 연동업체 변경 중 오류 발생: {str(e)}")
+                    logger.error(f"쿠팡 API 연동업체 변경 및 로그아웃 중 오류 발생: {str(e)}")
             else:
-                logger.info("쿠팡 로그인 정보가 없어 연동업체 변경을 건너뜁니다")
-            
-            # 9. 쿠팡 로그아웃
-            if coupang_id and coupang_password:
-                logger.info("쿠팡 로그아웃 시작")
-                try:
-                    coupang_manager = CoupangMarketManager(self.driver, self.wait)
-                    if coupang_manager.logout_coupang():
-                        logger.info("쿠팡 로그아웃 완료")
-                    else:
-                        logger.warning("쿠팡 로그아웃에 실패했지만 계속 진행합니다")
-                except Exception as e:
-                    logger.error(f"쿠팡 로그아웃 중 오류 발생: {str(e)}")
-            else:
-                logger.info("쿠팡 로그인 정보가 없어 로그아웃을 건너뜁니다")
+                logger.info("쿠팡 로그인 정보가 없어 연동업체 변경 및 로그아웃을 건너뜁니다")
             
             logger.info(f"상품 업로드 워크플로우 완료: {group_name}")
             return True
@@ -1588,7 +1597,7 @@ class ProductEditorCore6_Dynamic2:
             logger.info("상품 수 확인")
             
             # dropdown_utils2의 get_total_product_count 메서드 사용
-            product_count = self.dropdown_utils.get_total_product_count()
+            product_count = self.product_search_dropdown.get_total_product_count()
             
             if product_count == -1:
                 logger.warning("상품 수 확인 실패")
@@ -2165,32 +2174,54 @@ class ProductEditorCore6_Dynamic2:
             logger.error(f"미업로드 상품 검색 워크플로우 중 오류 발생: {e}")
             return False
     
-    def _select_status_dropdown(self):
+    def _select_status_dropdown(self, status_text="미업로드"):
         """
-        상태 드롭박스를 열고 '미업로드'를 선택합니다.
-        간단한 드롭다운 클릭 후 옵션 선택 방식을 사용합니다.
+        상태 드롭박스를 열고 지정된 상태를 선택합니다.
+        
+        Args:
+            status_text (str): 선택할 상태 텍스트 (예: '미업로드', '판매중', '품절' 등)
         
         Returns:
             bool: 성공 시 True, 실패 시 False
         """
         try:
-            logger.info("상태 드롭박스에서 '미업로드' 선택 시작")
+            logger.info(f"상태 드롭박스에서 '{status_text}' 선택 시작")
             
-            # 1. 상태 드롭박스 클릭하여 열기 (더 정확한 선택자 사용)
-            dropdown_selector = "//div[contains(@class, 'ant-select') and .//span[contains(text(), '상태 검색')]]"
-            dropdown_element = self.wait.until(EC.element_to_be_clickable((By.XPATH, dropdown_selector)))
-            dropdown_element.click()
-            logger.info("상태 드롭박스 클릭")
+            # 1. 상태 드롭박스 클릭하여 열기 (이미 선택된 상태도 고려한 선택자)
+            dropdown_selectors = [
+                "//div[contains(@class, 'ant-select') and .//span[contains(text(), '상태 검색')]]",  # 초기 상태
+                "//div[contains(@class, 'ant-select') and .//div[contains(@class, 'sc-ciQpPG') and contains(text(), '판매중')]]",  # 판매중 선택된 상태
+                "//div[contains(@class, 'ant-select') and .//div[contains(@class, 'sc-ciQpPG') and contains(text(), '미업로드')]]",  # 미업로드 선택된 상태
+                "//div[contains(@class, 'ant-select') and .//div[contains(@class, 'sc-ciQpPG')]]",  # 일반적인 선택된 상태
+                "//div[contains(@class, 'ant-select') and contains(@style, 'width: 128px')]",  # 스타일 기반 선택
+                "//div[contains(@class, 'ant-select-selector')]/parent::div[contains(@class, 'ant-select')]",  # 셀렉터 기반
+            ]
+            
+            dropdown_clicked = False
+            for selector in dropdown_selectors:
+                try:
+                    dropdown_element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                    dropdown_element.click()
+                    logger.info(f"상태 드롭박스 클릭 (선택자: {selector})")
+                    dropdown_clicked = True
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not dropdown_clicked:
+                logger.error("상태 드롭박스를 찾을 수 없음")
+                return False
+                
             time.sleep(2)  # 드롭다운 옵션이 로드될 시간 확보
             
-            # 2. '미업로드' 옵션 선택 (실제 DOM 구조 기반 선택자)
+            # 2. 지정된 상태 옵션 선택 (실제 DOM 구조 기반 선택자)
             option_selectors = [
-                "//div[contains(@class, 'ant-select-item') and .//div[contains(@class, 'sc-kBRoID') and contains(text(), '미업로드')]]",
-                "//div[contains(@class, 'ant-select-item') and contains(text(), '미업로드')]",
-                "//div[contains(@class, 'sc-kBRoID') and contains(text(), '미업로드')]",
-                "//div[@role='option' and .//div[contains(text(), '미업로드')]]",
-                "//div[contains(@class, 'ant-select-item') and text()='미업로드']",
-                "//div[@role='option' and text()='미업로드']"
+                f"//div[contains(@class, 'ant-select-item') and .//div[contains(@class, 'sc-kBRoID') and contains(text(), '{status_text}')]]",
+                f"//div[contains(@class, 'ant-select-item') and contains(text(), '{status_text}')]",
+                f"//div[contains(@class, 'sc-kBRoID') and contains(text(), '{status_text}')]",
+                f"//div[@role='option' and .//div[contains(text(), '{status_text}')]]",
+                f"//div[contains(@class, 'ant-select-item') and text()='{status_text}']",
+                f"//div[@role='option' and text()='{status_text}']"
             ]
             
             option_clicked = False
@@ -2198,25 +2229,52 @@ class ProductEditorCore6_Dynamic2:
                 try:
                     option_element = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
                     option_element.click()
-                    logger.info(f"'미업로드' 옵션 선택 완료 (선택자: {selector})")
+                    logger.info(f"'{status_text}' 옵션 선택 완료 (선택자: {selector})")
                     option_clicked = True
                     break
                 except TimeoutException:
                     continue
             
             if not option_clicked:
-                logger.error("모든 선택자로 '미업로드' 옵션을 찾을 수 없음")
+                logger.error(f"모든 선택자로 '{status_text}' 옵션을 찾을 수 없음")
                 return False
                 
             time.sleep(1)
             return True
             
         except TimeoutException:
-            logger.error("상태 드롭박스 또는 '미업로드' 옵션을 찾을 수 없음")
+            logger.error(f"상태 드롭박스 또는 '{status_text}' 옵션을 찾을 수 없음")
             return False
         except Exception as e:
             logger.error(f"상태 드롭박스 선택 중 오류 발생: {e}")
             return False
+    
+    def select_unuploaded_status(self):
+        """
+        '미업로드' 상태를 선택하는 편의 메서드
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        return self._select_status_dropdown("미업로드")
+    
+    def select_selling_status(self):
+        """
+        '판매중' 상태를 선택하는 편의 메서드
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        return self._select_status_dropdown("판매중")
+    
+    def select_soldout_status(self):
+        """
+        '품절' 상태를 선택하는 편의 메서드
+        
+        Returns:
+            bool: 성공 시 True, 실패 시 False
+        """
+        return self._select_status_dropdown("품절")
     
     def _select_coupang_market(self):
         """

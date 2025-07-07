@@ -97,9 +97,9 @@ EDITGOODS_SELECTORS = {
     "PRODUCT_OPTION_AI": "//button[.//span[contains(text(), 'AI 옵션명 다듬기')]]",
     "PRODUCT_OPTION_NUMBER": "//button[.//span[text()='1-99']]",
     
-    # 가격탭 요소 선택자 (정확한 할인율 필드 선택자로 복원)
-    "PRODUCT_PRICE_DISCOUNTRATE": "//input[@role='spinbutton' and @aria-valuenow='30']",
-    "PRODUCT_PRICE_DISCOUNTRATE1": "//input[@role='spinbutton' and @aria-valuenow='30']",
+    # 가격탭 요소 선택자 (마켓 표기 할인율 입력창)
+    "PRODUCT_PRICE_DISCOUNTRATE": "//span[contains(text(), '마켓 표기 할인율')]/ancestor::div[contains(@class, 'sc-eiQriw')]//input[@role='spinbutton']",
+    "PRODUCT_PRICE_DISCOUNTRATE1": "//span[contains(text(), '마켓 표기 할인율')]/ancestor::div[contains(@class, 'sc-eiQriw')]//input[@role='spinbutton']",
 
     # 모달창 닫기 관련 선택자
     "PRODUCT_MODAL_CLOSE": "//button[contains(@class, 'ant-modal-close')]",

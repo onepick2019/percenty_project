@@ -18,6 +18,8 @@ from typing import Dict, List, Optional, Union, Tuple
 # 루트 디렉토리를 경로에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+
+
 # 기존 모듈들 임포트 (루트에서)
 from product_editor_core6_dynamic_2 import ProductEditorCore6_Dynamic2
 
@@ -33,6 +35,9 @@ from account_manager import AccountManager
 
 # 공통 함수들 임포트
 from core.common.modal_handler import handle_post_login_modals, hide_channel_talk, close_modal_dialogs
+
+# percenty_utils에서 통합 모달 처리 함수 임포트
+from percenty_utils import hide_channel_talk_and_modals
 from core.common.navigation_handler import navigate_to_ai_sourcing, navigate_to_group_management, switch_to_non_group_view
 from core.common.product_handler import check_product_count, check_toggle_state, toggle_product_view
 from core.common.ui_handler import periodic_ui_cleanup, ensure_clean_ui_before_action
@@ -235,8 +240,8 @@ class Step6_2Core:
             # 로그인 후 모달 처리
             handle_post_login_modals(self.driver)
             
-            # 채널톡 숨기기
-            hide_channel_talk(self.driver)
+            # 채널톡 및 로그인 모달창 통합 처리
+            hide_channel_talk_and_modals(self.driver, log_prefix="6-2단계")
             
             # 기타 모달 닫기
             close_modal_dialogs(self.driver)

@@ -108,12 +108,7 @@ def main():
         
         print("✅ 신규상품등록 화면 전환 성공!")
         
-        # 10-1. 퍼센티 확장프로그램 설치
-        print("\n10-1. 퍼센티 확장프로그램 설치...")
-        if not dynamic_core._install_percenty_extension():
-            print("⚠️ 퍼센티 확장프로그램 설치 실패, 계속 진행합니다")
-        else:
-            print("✅ 퍼센티 확장프로그램 설치 성공!")
+        # 퍼센티 확장프로그램 설치는 execute_dynamic_upload_workflow 내부에서 자동으로 처리됩니다.
         
         # 11. 동적 업로드 워크플로우 실행
         print("\n11. 동적 업로드 워크플로우 실행...")
