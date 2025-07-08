@@ -55,20 +55,20 @@ class PercentyAdvancedGUI:
         self.total_tasks = 0
         self.completed_tasks = 0
         
-        # 주기적 실행 관리자 초기화
-        if PeriodicExecutionManager:
-            self.periodic_manager = PeriodicExecutionManager(log_callback=self._add_log)
-        else:
-            self.periodic_manager = None
-        
         # 설정 파일 경로
         self.config_file = Path("percenty_gui_config.json")
         
         # UI 변수들
         self.setup_variables()
         
-        # UI 초기화
+        # UI 초기화 (log_text 생성을 위해 먼저 실행)
         self._init_ui()
+        
+        # 주기적 실행 관리자 초기화 (UI 초기화 후에 실행)
+        if PeriodicExecutionManager:
+            self.periodic_manager = PeriodicExecutionManager(log_callback=self._add_log)
+        else:
+            self.periodic_manager = None
         
         # 설정 로드
         self.load_configuration()

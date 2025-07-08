@@ -152,7 +152,14 @@ class CoupangMarketManager:
                         except Exception as close_error:
                             logger.error(f"탭 닫기 실패: {close_error}")
                     else:
-                        logger.info("로그아웃 및 탭 정리 완료")
+                        # 로그아웃 성공 시 탭 닫기 및 메인 탭으로 복귀
+                        try:
+                            self.driver.close()
+                            if len(self.driver.window_handles) > 0:
+                                self.driver.switch_to.window(self.driver.window_handles[0])
+                            logger.info("로그아웃 및 탭 정리 완료")
+                        except Exception as close_error:
+                            logger.error(f"로그아웃 후 탭 닫기 실패: {close_error}")
                 except Exception as logout_error:
                     logger.error(f"로그아웃 및 탭 정리 중 오류: {logout_error}")
                     # 오류 발생 시에도 탭 닫기 시도
@@ -1078,18 +1085,27 @@ class CoupangMarketManager:
     
     def _close_coupang_tab(self):
         """
-        쿠팡 탭을 닫고 메인 탭으로 돌아갑니다.
+        현재 쿠팡 탭을 닫고 메인 탭으로 돌아갑니다.
         """
         try:
-            if self.coupang_tab and self.coupang_tab in self.driver.window_handles:
-                self.driver.switch_to.window(self.coupang_tab)
+            # 현재 열린 탭 수 확인
+            all_windows = self.driver.window_handles
+            logger.info(f"현재 열린 탭 수: {len(all_windows)}")
+            
+            if len(all_windows) > 1:
+                # 현재 탭 닫기
                 self.driver.close()
-                
-                # 메인 탭으로 돌아가기
-                if len(self.driver.window_handles) > 0:
-                    self.driver.switch_to.window(self.driver.window_handles[0])
-                
                 logger.info("쿠팡 탭 닫기 완료")
+                
+                # 메인 탭으로 돌아가기 (첫 번째 탭)
+                remaining_windows = self.driver.window_handles
+                if remaining_windows:
+                    self.driver.switch_to.window(remaining_windows[0])
+                    logger.info("메인 탭으로 복귀 완료")
+                else:
+                    logger.warning("복귀할 탭이 없습니다")
+            else:
+                logger.info("현재 탭이 유일한 탭이므로 닫지 않습니다")
                 
         except Exception as e:
             logger.error(f"쿠팡 탭 닫기 중 오류 발생: {str(e)}")

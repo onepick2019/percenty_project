@@ -3,14 +3,14 @@
     "step1_quantity": 500,
     "other_quantity": 100,
     "selected_steps": [
-      "61"
+      "63"
     ],
     "selected_accounts": [
-      "wop33gogos@gmail.com"
+      "onepick2019@gmail.com"
     ],
-    "schedule_time": "19:32",
+    "schedule_time": "15:42",
     "step_interval": 10,
-    "account_delay": 120,
+    "account_delay": 300,
     "chunk_sizes": {
       "1": 20,
       "51": 20,

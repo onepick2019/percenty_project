@@ -517,7 +517,7 @@ class ProductEditorCore6_Dynamic1:
                 logger.info("PyAutoGUI 클릭 완료: (1000, 240)")
                 
                 # 확장프로그램 설치 완료 대기
-                time.sleep(3)
+                time.sleep(10)
                 
                 logger.info("퍼센티 확장프로그램 설치 완료")
                 
@@ -1505,7 +1505,7 @@ class ProductEditorCore6_Dynamic1:
             logger.info(f"상품 업로드 워크플로우 시작: {group_name}")
             
             # 1-4단계를 2회 반복
-            for round_num in range(1, 3):  # 1회차, 2회차
+            for round_num in range(1, 6):  # 1회차, 2회차
                 logger.info(f"업로드 {round_num}회차 시작")
                 
                 # 1. 상품 수 확인 (0개인 경우 스킵)
@@ -1541,7 +1541,7 @@ class ProductEditorCore6_Dynamic1:
                 time.sleep(5)
                 
                 # 2회차가 아닌 경우에만 새로고침 버튼 클릭
-                if round_num < 3:
+                if round_num < 6:
                     logger.info(f"{round_num}회차 완료, 새로고침 버튼 클릭 후 다음 회차 진행")
                     try:
                         # 새로고침 버튼 클릭
@@ -1559,9 +1559,9 @@ class ProductEditorCore6_Dynamic1:
             if not self._update_smartstore_delivery_info():
                 logger.warning("스마트스토어 배송정보 변경에 실패했지만 계속 진행합니다")
             
-            # 7. 카페24 로그인해서 11번가 등록자료 가져오기
-            if not self._import_11st_products_from_cafe24():
-                logger.warning("카페24 11번가 상품 가져오기에 실패했지만 계속 진행합니다")
+            # 7. 카페24 로그인해서 11번가 등록자료 가져오기 (임시 비활성화)
+            # if not self._import_11st_products_from_cafe24():
+            #     logger.warning("카페24 11번가 상품 가져오기에 실패했지만 계속 진행합니다")
             
             logger.info(f"상품 업로드 워크플로우 완료: {group_name}")
             return True

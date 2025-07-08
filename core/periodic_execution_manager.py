@@ -449,7 +449,13 @@ class PeriodicExecutionManager:
             
             # 청크 사이즈 가져오기
             chunk_sizes = self.config.get('chunk_sizes', {})
-            chunk_size = chunk_sizes.get(step, 10)  # 기본값 10
+            
+            # 61, 62, 63단계는 마켓 설정 기반으로 1회만 실행되어야 함
+            if step in ['61', '62', '63']:
+                chunk_size = 1  # 청크 사이즈를 1로 고정하여 1회만 실행
+                self._log(f"단계 {step}는 마켓 설정 기반 단계로 청크 사이즈를 1로 설정")
+            else:
+                chunk_size = chunk_sizes.get(step, 10)  # 기본값 10
             
             # 가상 계정 ID를 실제 이메일로 변환
             real_account_id = get_real_account_id(account_id)
@@ -557,30 +563,39 @@ class PeriodicExecutionManager:
             '51': 285,   # 4.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-160초)
             '52': 315,   # 5.25분/아이템 (최종 처리 단계 + 휴먼딜레이 152-170초)
             '53': 345,   # 5.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-180초)
-            '61': 300,   # 5분/아이템 (동적 업로드 처리)
-            '62': 300,   # 5분/아이템 (동적 업로드 처리)
-            '63': 300    # 5분/아이템 (동적 업로드 처리)
+            '61': 12000,  # 200분/마켓설정 (동적 업로드 처리 - 마켓당 10회 업로드 * 20분)
+            '62': 12000,  # 200분/마켓설정 (동적 업로드 처리 - 마켓당 10회 업로드 * 20분)
+            '63': 12000   # 200분/마켓설정 (동적 업로드 처리 - 마켓당 10회 업로드 * 20분)
         }
         
         # 청크 수 계산
-        total_chunks = (quantity + chunk_size - 1) // chunk_size
+        # 61, 62, 63단계는 마켓 설정 기반으로 1회만 실행되므로 청크 수를 1로 설정
+        if step in ['61', '62', '63']:
+            total_chunks = 1
+        else:
+            total_chunks = (quantity + chunk_size - 1) // chunk_size
         
         # 단일 아이템 처리 시간
         base_time_per_item = base_timeouts_per_item.get(step, 90)  # 기본 1.5분/아이템
         
-        # 전체 배치 타임아웃 계산 (총 수량 * 아이템당 시간 + 청크별 오버헤드)
-        total_timeout = quantity * base_time_per_item
-        
-        # 청크별 브라우저 재시작 오버헤드 추가 (청크당 5분)
-        chunk_overhead = total_chunks * 300
-        total_timeout += chunk_overhead
+        # 전체 배치 타임아웃 계산
+        if step in ['61', '62', '63']:
+            # 61, 62, 63단계는 마켓 설정 기반으로 1회만 실행되므로 고정 타임아웃 사용
+            # 마켓 설정당 200분 * 최대 20개 마켓 설정 = 최대 66.67시간 (240000초)
+            total_timeout = base_time_per_item * 20  # 최대 20개 마켓 설정을 고려한 충분한 타임아웃
+        else:
+            # 다른 단계는 기존 로직 사용 (총 수량 * 아이템당 시간 + 청크별 오버헤드)
+            total_timeout = quantity * base_time_per_item
+            # 청크별 브라우저 재시작 오버헤드 추가 (청크당 5분)
+            chunk_overhead = total_chunks * 300
+            total_timeout += chunk_overhead
         
         # 최소 타임아웃 보장 (20분)
         min_timeout = 1200
         total_timeout = max(total_timeout, min_timeout)
         
-        # 최대 타임아웃 제한 (48시간) - 대용량 배치 작업 지원
-        max_timeout = 172800
+        # 최대 타임아웃 제한 (72시간) - 61,62,63단계의 대용량 마켓 처리 지원
+        max_timeout = 259200
         total_timeout = min(total_timeout, max_timeout)
         
         return total_timeout
