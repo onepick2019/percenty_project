@@ -127,7 +127,10 @@ class MarketManagerCafe24:
     def _perform_login(self, cafe24_id, cafe24_password):
         """
         카페24 로그인을 수행합니다.
+<<<<<<< HEAD
         로그인 페이지 상태를 확인하고 필요시 로그아웃을 먼저 수행합니다.
+=======
+>>>>>>> f4922c527baa5e235a8444055ded324c41ceb21d
         
         Args:
             cafe24_id (str): 카페24 아이디
@@ -139,11 +142,14 @@ class MarketManagerCafe24:
         try:
             logger.info(f"카페24 로그인 시도: {cafe24_id}")
             
+<<<<<<< HEAD
             # 로그인 페이지 상태 확인 및 필요시 로그아웃 수행
             if not self._check_and_prepare_login_page():
                 logger.error("로그인 페이지 준비 실패")
                 return False
             
+=======
+>>>>>>> f4922c527baa5e235a8444055ded324c41ceb21d
             # 아이디 입력
             id_input = self.wait.until(
                 EC.presence_of_element_located((By.ID, "mall_id"))
