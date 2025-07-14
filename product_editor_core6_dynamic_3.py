@@ -662,19 +662,19 @@ class ProductEditorCore6_Dynamic3:
             """
 
 
-            # 2-1 ~ 2-5 단계를 2회 반복
+            # 2-1 ~ 2-5 단계를 6회 반복
             # 삭제 메서드 실행, 상품수가 0개가 될때까지 반복     
-            for round_num in range(1, 11):  # 최대 10회차까지 반복
+            for round_num in range(1, 6):  # 최대 10회차까지 반복
                 logger.info(f"삭제 {round_num}회차 시작")
                 
                 # 2-1. 상품 수 확인 (0개인 경우 해당 회차 스킵)
                 product_count = self._check_product_count()
                 if product_count == 0:
                     logger.info(f"{round_num}회차: 상품이 0개이므로 삭제 완료")
-                    # 1회차에서 상품이 0개면 전체 워크플로우 종료
+                    # 1회차에서 상품이 0개면 삭제 플로우만 스킵하고 업로드 플로우로 진행
                     if round_num == 1:
-                        logger.info(f"상품이 0개이므로 삭제 워크플로우를 스킵합니다")
-                        return True
+                        logger.info(f"상품이 0개이므로 삭제 워크플로우를 스킵하고 업로드 플로우로 진행합니다")
+                        break
                     # 2회차 이후에서 상품이 0개면 삭제 완료
                     else:
                         logger.info(f"{round_num}회차 삭제 완료, 모든 상품이 삭제되었습니다")
@@ -708,7 +708,7 @@ class ProductEditorCore6_Dynamic3:
                 time.sleep(5)
                 
                 # 마지막 회차가 아닌 경우에만 상품 검색 버튼 클릭
-                if round_num < 11:
+                if round_num < 6:
                     logger.info(f"{round_num}회차 완료, 상품 검색 버튼 클릭 후 다음 회차 진행")
                     if not self._click_product_search_button():
                         logger.warning("상품 검색 버튼 클릭 실패, 다음 회차 계속 진행")
@@ -726,8 +726,8 @@ class ProductEditorCore6_Dynamic3:
                 logger.error("미업로드 상품 검색 실패")
                 return False
 
-            # 3-1 ~ 3-5 단계를 2회 반복
-            for round_num in range(1, 11):  # 1회차, 2회차
+            # 3-1 ~ 3-5 단계를 6회 반복
+            for round_num in range(1, 6):  # 1회차, 2회차
                 logger.info(f"업로드 {round_num}회차 시작")
                 
                 # 3-1. 상품 수 확인 (0개인 경우 해당 회차 스킵)
@@ -748,9 +748,9 @@ class ProductEditorCore6_Dynamic3:
                     logger.info(f"{round_num}회차 확인된 상품 수: {product_count}개")
                 
                 # 3-2. 50개씩 보기 설정 
-                # if not self._set_items_per_page_50(): 
-                #   logger.error("50개씩 보기 설정 실패") 
-                #   return False
+                if not self._set_items_per_page_50(): 
+                   logger.error("50개씩 보기 설정 실패") 
+                   return False
                 
                 # 3-3. 전체선택
                 if not self._select_all_products():
@@ -770,7 +770,7 @@ class ProductEditorCore6_Dynamic3:
                 time.sleep(5)
                 
                 # 2회차가 아닌 경우에만 상품 검색 버튼 클릭
-                if round_num < 11:
+                if round_num < 6:
                     logger.info(f"{round_num}회차 완료, 상품 검색 버튼 클릭 후 다음 회차 진행")
                     if not self._click_product_search_button():
                         logger.warning("상품 검색 버튼 클릭 실패, 다음 회차 계속 진행")

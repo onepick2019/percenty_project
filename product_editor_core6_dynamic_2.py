@@ -208,10 +208,55 @@ class ProductEditorCore6_Dynamic2:
             # 현재 마켓 설정 정보 저장 (다른 메서드에서 사용하기 위해)
             self.current_market_config = market_config
             
-            # 0. 쿠팡 API 연동업체를 '퍼센티'로 변경
+            # 실행 횟수 추적을 위한 클래스 변수 초기화
+            if not hasattr(self, 'execution_count'):
+                self.execution_count = 0
+            self.execution_count += 1
+            
+            # 1. 마켓설정 화면 열기
+            if not self._open_market_settings():
+                logger.error("마켓설정 화면 열기 실패")
+                self._ensure_main_tab_focus()
+                return False
+            
+            # 2. API 연결 끊기 로직 (1회차와 2회차 이후 구분)
+            if self.execution_count == 1:
+                # 1회차: 모든 마켓 API 연결 끊기
+                logger.info("1회차 실행 - 모든 마켓 API 연결 끊기 시작")
+                if not self._disconnect_all_market_apis():
+                    logger.error("마켓 API 연결 끊기 실패")
+                    return False
+            else:
+                # 2회차 이후: 쿠팡 API만 처리 (새로고침은 execute_dynamic_upload_workflow에서 이미 수행됨)
+                logger.info(f"{self.execution_count}회차 실행 - 쿠팡 API만 처리")
+                
+                # 마켓설정 화면 열기
+                if not self._open_market_settings():
+                    logger.error("마켓설정 화면 열기 실패")
+                    self._ensure_main_tab_focus()
+                    return False
+                
+                # 쿠팡 API 연결 끊기 및 검증
+                if not self._disconnect_and_verify_coupang_api():
+                    logger.error("쿠팡 API 연결 끊기 및 검증 실패")
+                    return False
+            
+            # 3. 쿠팡 API 키 확인 (플로우 진행 여부 결정)
             coupang_id = market_config.get('coupang_id', '')
+            coupang_code = market_config.get('coupang_code', '')
+            coupang_access = market_config.get('coupang_access', '')
+            coupang_secret = market_config.get('coupang_secret', '')
             coupang_password = market_config.get('coupang_password', '')
             
+            logger.info(f"쿠팡 API 키 확인: ID={coupang_id[:10] if coupang_id else 'N/A'}..., Code={coupang_code[:10] if coupang_code else 'N/A'}..., Access={coupang_access[:10] if coupang_access else 'N/A'}..., Secret={coupang_secret[:10] if coupang_secret else 'N/A'}...")
+            
+            # 쿠팡 API 키가 모두 있는 경우에만 플로우 진행
+            if not (coupang_id and coupang_code and coupang_access and coupang_secret):
+                logger.info("쿠팡 API 키가 불완전하여 마켓 설정 플로우를 건너뜁니다.")
+                self.coupang_api_configured = False
+                return False
+            
+            # 4. 쿠팡 API 연동업체를 '퍼센티'로 변경 (키가 있는 경우에만)
             if coupang_id and coupang_password:
                 logger.info("쿠팡 API 연동업체를 '퍼센티'로 변경 시작")
                 try:
@@ -225,117 +270,17 @@ class ProductEditorCore6_Dynamic2:
             else:
                 logger.info("쿠팡 로그인 정보가 없어 연동업체 변경을 건너뜁니다")
             
-            # 1. 마켓설정 화면 열기
-            if not self._open_market_settings():
-                logger.error("마켓설정 화면 열기 실패")
-                self._ensure_main_tab_focus()
-                return False
-            
-
-            # 2. 모든 마켓 API 연결 끊기
-            if not self._disconnect_all_market_apis():
-                logger.error("마켓 API 연결 끊기 실패")
-                return False
-            
-            # 3. 각 마켓별 API 키 입력 (키값이 있는 경우에만)
+            # 5. 쿠팡 API 키 입력
             api_setup_success = False
             
-            """
-            # 3-1. 11번가 API KEY 입력
-            api_key_11st = market_config.get('11store_api', '')
-            if api_key_11st:
-                if self._input_11st_api_key(api_key_11st):
-                    logger.info("11번가 API KEY 입력 성공")
-                    api_setup_success = True
-                else:
-                    logger.error("11번가 API KEY 입력 실패")
-            
-            # 3-2. 톡스토어 API KEY 입력
-            talkstore_api_key = market_config.get('talkstore_api', '')
-            talkstore_store_url = market_config.get('talkstore_url', '')
-            logger.info(f"톡스토어 API 키 확인: API키={talkstore_api_key[:10] if talkstore_api_key else 'N/A'}..., URL={talkstore_store_url[:30] if talkstore_store_url else 'N/A'}...")
-            
-            if talkstore_api_key and talkstore_store_url:
-                logger.info("톡스토어 API 키 입력 시도 시작")
-                if self._input_talkstore_api_keys(talkstore_api_key, talkstore_store_url):
-                    logger.info("톡스토어 API 키 입력 성공")
-                    api_setup_success = True
-                else:
-                    logger.error("톡스토어 API 키 입력 실패")
+            logger.info("쿠팡 API 키 입력 시도 시작")
+            if self._input_coupang_api_keys(coupang_id, coupang_code, coupang_access, coupang_secret):
+                logger.info("쿠팡 API 키 입력 성공")
+                api_setup_success = True
+                self.coupang_api_configured = True  # 쿠팡 API 키 설정 완료 표시
             else:
-                logger.info("톡스토어 API 키 또는 URL이 없어서 입력을 건너뜁니다.")
-            
-            # 3-3. 11번가-글로벌 API 키 입력
-            global_11st_api_key = market_config.get('11global_api', '')
-            logger.info(f"11번가-글로벌 API 키 확인: {global_11st_api_key[:10] if global_11st_api_key else 'N/A'}...")
-            
-            if global_11st_api_key:
-                logger.info("11번가-글로벌 API 키 입력 시도 시작")
-                if self._input_11st_global_api_key(global_11st_api_key):
-                    logger.info("11번가-글로벌 API 키 입력 성공")
-                    api_setup_success = True
-                else:
-                    logger.error("11번가-글로벌 API 키 입력 실패")
-            else:
-                logger.info("11번가-글로벌 API 키가 없어서 입력을 건너뜁니다.")
-            
-            # 3-4. 옥션/G마켓 API 키 입력
-            auction_api_key = market_config.get('auction_id', '')
-            gmarket_api_key = market_config.get('gmarket_id', '')
-            logger.info(f"옥션/G마켓 API 키 확인: 옥션={auction_api_key[:10] if auction_api_key else 'N/A'}..., G마켓={gmarket_api_key[:10] if gmarket_api_key else 'N/A'}...")
-            
-            if auction_api_key and gmarket_api_key:
-                logger.info("옥션/G마켓 API 키 입력 시도 시작")
-                if self._input_auction_gmarket_api_keys(auction_api_key, gmarket_api_key):
-                    logger.info("옥션/G마켓 API 키 입력 성공")
-                    api_setup_success = True
-                else:
-                    logger.error("옥션/G마켓 API 키 입력 실패")
-            else:
-                logger.info("옥션/G마켓 API 키가 없어서 입력을 건너뜁니다.")
-            
-            # 3-5. 스마트스토어 API 키 입력
-            smartstore_api_key = market_config.get('smartstore_api', '')
-            logger.info(f"스마트스토어 API 키 확인: {smartstore_api_key[:10] if smartstore_api_key else 'N/A'}...")
-            
-            if smartstore_api_key:
-                logger.info("스마트스토어 API 키 입력 시도 시작")
-                if self._input_smartstore_api_key(smartstore_api_key):
-                    logger.info("스마트스토어 API 키 입력 성공")
-                    api_setup_success = True
-                    self.smartstore_api_configured = True  # 스마트스토어 API 키 설정 완료 표시
-                else:
-                    logger.error("스마트스토어 API 키 입력 실패")
-            else:
-                logger.info("스마트스토어 API 키가 없어서 입력을 건너뜁니다.")
-                self.smartstore_api_configured = False  # 스마트스토어 API 키 미설정 표시
-            
-            """
-            
-            # 3-6. 쿠팡 API 키 입력
-            coupang_id = market_config.get('coupang_id', '')
-            coupang_code = market_config.get('coupang_code', '')
-            coupang_access = market_config.get('coupang_access', '')
-            coupang_secret = market_config.get('coupang_secret', '')
-            
-            logger.info(f"쿠팡 API 키 확인: ID={coupang_id[:10] if coupang_id else 'N/A'}..., Code={coupang_code[:10] if coupang_code else 'N/A'}..., Access={coupang_access[:10] if coupang_access else 'N/A'}..., Secret={coupang_secret[:10] if coupang_secret else 'N/A'}...")
-            
-            if coupang_id and coupang_code and coupang_access and coupang_secret:
-                logger.info("쿠팡 API 키 입력 시도 시작")
-                if self._input_coupang_api_keys(coupang_id, coupang_code, coupang_access, coupang_secret):
-                    logger.info("쿠팡 API 키 입력 성공")
-                    api_setup_success = True
-                    self.coupang_api_configured = True  # 쿠팡 API 키 설정 완료 표시
-                else:
-                    logger.error("쿠팡 API 키 입력 실패")
-            else:
-                logger.info("쿠팡 API 키가 불완전하여 입력을 건너뜁니다.")
-                self.coupang_api_configured = False  # 쿠팡 API 키 미설정 표시
-            
-            
-            # API 키가 하나도 설정되지 않은 경우
-            if not api_setup_success:
-                logger.warning("설정된 API 키가 없습니다.")
+                logger.error("쿠팡 API 키 입력 실패")
+                self.coupang_api_configured = False
                 return False
             
             logger.info(f"마켓 설정 화면 정보 처리 완료 - 그룹: {market_config['groupname']}")
@@ -701,6 +646,136 @@ class ProductEditorCore6_Dynamic2:
             
         except Exception as e:
             logger.error(f"마켓 API 연결 끊기 중 오류 발생: {e}")
+            return False
+    
+    def _disconnect_and_verify_coupang_api(self):
+        """
+        쿠팡 API 연결을 끊고 키값이 제대로 지워졌는지 검증합니다.
+        키값이 남아있으면 화면 새로고침 후 재시도합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        max_retries = 3
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"쿠팡 API 연결 끊기 및 검증 시도 {attempt + 1}/{max_retries}")
+                
+                # 모달창 감지 및 닫기
+                self._detect_and_close_modal()
+                
+                # 쿠팡 API 연결 끊기
+                logger.info("쿠팡 API 연결 끊기 시작")
+                success = self.market_utils.disconnect_coupang_api()
+                
+                if success:
+                    logger.info("쿠팡 API 연결 끊기 성공")
+                    
+                    # 연결 끊기 후 키값 검증
+                    time.sleep(2)  # DOM 안정화 대기
+                    
+                    if self._verify_coupang_api_key_cleared():
+                        logger.info("쿠팡 API 키값이 성공적으로 지워졌습니다")
+                        return True
+                    else:
+                        logger.warning(f"쿠팡 API 키값이 남아있습니다. 재시도 {attempt + 1}/{max_retries}")
+                        
+                        if attempt < max_retries - 1:
+                            # 화면 새로고침 후 재시도
+                            logger.info("화면 새로고침 후 재시도")
+                            self.driver.refresh()
+                            time.sleep(3)
+                            
+                            # 마켓설정 화면 다시 열기
+                            if not self._open_market_settings():
+                                logger.error("마켓설정 화면 재열기 실패")
+                                continue
+                        else:
+                            logger.error("최대 재시도 횟수 초과 - 쿠팡 API 키값 정리 실패")
+                            return False
+                else:
+                    logger.warning(f"쿠팡 API 연결 끊기 실패. 재시도 {attempt + 1}/{max_retries}")
+                    
+                    if attempt < max_retries - 1:
+                        # 화면 새로고침 후 재시도
+                        logger.info("화면 새로고침 후 재시도")
+                        self.driver.refresh()
+                        time.sleep(3)
+                        
+                        # 마켓설정 화면 다시 열기
+                        if not self._open_market_settings():
+                            logger.error("마켓설정 화면 재열기 실패")
+                            continue
+                    else:
+                        logger.error("최대 재시도 횟수 초과 - 쿠팡 API 연결 끊기 실패")
+                        return False
+                        
+            except Exception as e:
+                logger.error(f"쿠팡 API 연결 끊기 및 검증 중 오류 발생 (시도 {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    return False
+                continue
+        
+        return False
+    
+    def _verify_coupang_api_key_cleared(self):
+        """
+        쿠팡 API 키값 입력창이 비어있는지 확인합니다.
+        
+        Returns:
+            bool: 키값이 비어있으면 True, 남아있으면 False
+        """
+        try:
+            logger.info("쿠팡 API 키값 정리 상태 검증 시작")
+            
+            # 쿠팡 탭으로 전환
+            if not self.market_utils.switch_to_market('coupang'):
+                logger.error("쿠팡 탭 전환 실패")
+                return False
+            
+            # 쿠팡 패널 로드 대기
+            if not self.market_utils.wait_for_market_panel_load('coupang'):
+                logger.error("쿠팡 패널 로드 실패")
+                return False
+            
+            # 쿠팡 API 키 입력창 선택자들
+            api_key_input_selectors = [
+                "input[placeholder*='쿠팡']",
+                "input[placeholder*='API']",
+                "input[placeholder*='키']",
+                "input[name*='coupang']",
+                "input[id*='coupang']",
+                "div[data-testid*='coupang'] input",
+                "div[class*='coupang'] input[type='text']",
+                "div[class*='coupang'] input[type='password']"
+            ]
+            
+            for selector in api_key_input_selectors:
+                try:
+                    input_element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                    if input_element and input_element.is_displayed():
+                        input_value = input_element.get_attribute('value') or ''
+                        input_value = input_value.strip()
+                        
+                        logger.info(f"쿠팡 API 키 입력창 값: '{input_value}'")
+                        
+                        if input_value:
+                            logger.warning("쿠팡 API 키값이 남아있습니다")
+                            return False
+                        else:
+                            logger.info("쿠팡 API 키값이 성공적으로 정리되었습니다")
+                            return True
+                            
+                except Exception as e:
+                    logger.debug(f"선택자 {selector} 시도 중 오류: {e}")
+                    continue
+            
+            logger.warning("쿠팡 API 키 입력창을 찾을 수 없습니다")
+            return True  # 입력창을 찾을 수 없으면 정리된 것으로 간주
+            
+        except Exception as e:
+            logger.error(f"쿠팡 API 키값 검증 중 오류 발생: {e}")
             return False
     
     def _input_11st_api_key(self, api_key):
@@ -1388,11 +1463,7 @@ class ProductEditorCore6_Dynamic2:
         try:
             logger.info("등록상품관리 화면으로 전환 시작")
             
-            # 마켓설정 화면에서 DOM 간섭을 방지하기 위해 페이지 새로고침
-            logger.info("DOM 간섭 방지를 위한 페이지 새로고침 실행")
-            self.driver.refresh()
-            time.sleep(3)  # 새로고침 후 대기
-            logger.info("페이지 새로고침 완료")
+            # 새로고침은 execute_dynamic_upload_workflow에서 이미 수행되므로 생략
             
             # DOM 선택자 - span.ant-menu-title-content 중에서 '등록 상품 관리' 텍스트를 가진 요소
             selectors = [
@@ -1486,14 +1557,34 @@ class ProductEditorCore6_Dynamic2:
         try:
             logger.info(f"상품 업로드 워크플로우 시작: {group_name}")
             
-            # 1-4단계를 2회 반복
-            for round_num in range(1, 6):  # 1회차, 2회차
+            # 그룹명 매핑 정의
+            completion_mapping = {
+                '쇼핑몰A1': '완료A1',
+                '쇼핑몰A2': '완료A2', 
+                '쇼핑몰A3': '완료A3',
+                '쇼핑몰B1': '완료B1',
+                '쇼핑몰B2': '완료B2', 
+                '쇼핑몰B3': '완료B3',
+                '쇼핑몰C1': '완료C1',
+                '쇼핑몰C2': '완료C2', 
+                '쇼핑몰C3': '완료C3',                 
+                '쇼핑몰D1': '완료D1',
+                '쇼핑몰D2': '완료D2', 
+                '쇼핑몰D3': '완료D3'                
+            }
+            
+            # 현재 그룹명으로 첫 번째 업로드 플로우 실행 (3회 반복)
+            current_group = group_name
+            logger.info(f"첫 번째 업로드 플로우 시작: {current_group}")
+            
+            # 1-4단계를 3회 반복
+            for round_num in range(1, 4):  # 1회차, 2회차, 3회차
                 logger.info(f"업로드 {round_num}회차 시작")
                 
                 # 1. 상품 수 확인 (0개인 경우 반복 업로드 스킵)
                 product_count = self._check_product_count()
                 if product_count == 0:
-                    logger.info(f"그룹 '{group_name}'에 상품이 0개이므로 반복 업로드를 스킵하고 후속 플로우를 진행합니다")
+                    logger.info(f"그룹 '{current_group}'에 상품이 0개이므로 반복 업로드를 스킵하고 후속 플로우를 진행합니다")
                     break  # 반복문만 종료하고 후속 플로우는 계속 진행
                 elif product_count == -1:
                     logger.warning(f"{round_num}회차 상품 수 확인 실패, 계속 진행합니다")
@@ -1522,8 +1613,8 @@ class ProductEditorCore6_Dynamic2:
                 # 모달창 닫기 후 안정성을 위한 대기
                 time.sleep(5)
                 
-                # 2회차가 아닌 경우에만 상품검색 버튼 클릭
-                if round_num < 6:
+                # 3회차가 아닌 경우에만 상품검색 버튼 클릭
+                if round_num < 3:
                     logger.info(f"{round_num}회차 완료, 상품검색 버튼 클릭 후 다음 회차 진행")
                     try:
                         # 상품검색 버튼 클릭
@@ -1534,6 +1625,74 @@ class ProductEditorCore6_Dynamic2:
                         time.sleep(3)  # 검색 후 대기
                     except Exception as e:
                         logger.error(f"상품검색 버튼 클릭 실패: {e}")
+            
+            # 첫 번째 플로우 완료 후 그룹명 변경 및 두 번째 플로우 실행
+            if current_group in completion_mapping:
+                completion_group = completion_mapping[current_group]
+                logger.info(f"그룹명을 '{current_group}'에서 '{completion_group}'으로 변경하여 두 번째 업로드 플로우 시작")
+                
+                # 그룹 변경
+                if not self._select_dynamic_group(completion_group):
+                    logger.error(f"'{completion_group}' 그룹 선택 실패")
+                    return False
+                
+                # 상품검색 버튼 클릭하여 완료 그룹 상품 검색
+                if not self._click_product_search_button():
+                    logger.error("완료 그룹 상품검색 버튼 클릭 실패")
+                    return False
+                
+                time.sleep(3)  # 검색 후 대기
+                
+                # 완료 그룹으로 1-4단계를 3회 반복
+                for round_num in range(1, 4):  # 1회차, 2회차, 3회차
+                    logger.info(f"완료 그룹 업로드 {round_num}회차 시작")
+                    
+                    # 1. 상품 수 확인 (0개인 경우 반복 업로드 스킵)
+                    product_count = self._check_product_count()
+                    if product_count == 0:
+                        logger.info(f"그룹 '{completion_group}'에 상품이 0개이므로 반복 업로드를 스킵하고 후속 플로우를 진행합니다")
+                        break  # 반복문만 종료하고 후속 플로우는 계속 진행
+                    elif product_count == -1:
+                        logger.warning(f"완료 그룹 {round_num}회차 상품 수 확인 실패, 계속 진행합니다")
+                    else:
+                        logger.info(f"완료 그룹 {round_num}회차 확인된 상품 수: {product_count}개")
+                    
+                    # 2. 50개씩 보기 설정 
+                    if not self._set_items_per_page_50(): 
+                       logger.error("50개씩 보기 설정 실패") 
+                       return False
+                    
+                    # 3. 전체선택
+                    if not self._select_all_products():
+                        logger.error(f"완료 그룹 {round_num}회차 전체선택 실패")
+                        return False
+                    
+                    # 4. 업로드 버튼 클릭해서 업로드 모달창 열고 선택 상품 일괄 업로드 클릭
+                    if not self._handle_bulk_upload():
+                        logger.error(f"완료 그룹 {round_num}회차 일괄 업로드 처리 실패")
+                        return False
+                    
+                    # 5. 업로드 완료 대기 및 모달창 닫기
+                    if not self._wait_for_upload_completion():
+                        logger.warning(f"완료 그룹 {round_num}회차 업로드 완료 대기 또는 모달창 닫기에 실패했지만 계속 진행합니다")
+                    
+                    # 모달창 닫기 후 안정성을 위한 대기
+                    time.sleep(5)
+                    
+                    # 3회차가 아닌 경우에만 상품검색 버튼 클릭
+                    if round_num < 3:
+                        logger.info(f"완료 그룹 {round_num}회차 완료, 상품검색 버튼 클릭 후 다음 회차 진행")
+                        try:
+                            # 상품검색 버튼 클릭
+                            if self._click_product_search_button():
+                                logger.info("상품검색 버튼 클릭 완료")
+                            else:
+                                logger.error("상품검색 버튼 클릭 실패")
+                            time.sleep(3)  # 검색 후 대기
+                        except Exception as e:
+                            logger.error(f"상품검색 버튼 클릭 실패: {e}")
+            else:
+                logger.info(f"'{current_group}'은 completion_mapping에 없어 두 번째 플로우를 건너뜁니다")
             
             """
             # 6. 스마트스토어 배송정보 변경 (2회 업로드 완료 후)
@@ -1555,24 +1714,11 @@ class ProductEditorCore6_Dynamic2:
                     # 하나의 CoupangMarketManager 인스턴스로 연동업체 변경과 로그아웃을 순차 처리
                     coupang_manager = CoupangMarketManager(self.driver, self.wait)
                     
-                    # 연동업체 변경
+                    # 연동업체 변경 (로그아웃과 탭 정리 포함)
                     if coupang_manager.change_api_integrator_to_nextengine(market_config):
                         logger.info("쿠팡 API 연동업체를 '넥스트엔진'으로 변경 완료")
-                        
-                        # 연동업체 변경 성공 후 로그아웃 진행
-                        logger.info("쿠팡 로그아웃 시작")
-                        if coupang_manager.logout_coupang():
-                            logger.info("쿠팡 로그아웃 완료")
-                        else:
-                            logger.warning("쿠팡 로그아웃에 실패했지만 계속 진행합니다")
                     else:
                         logger.warning("쿠팡 API 연동업체 '넥스트엔진' 변경에 실패했지만 계속 진행합니다")
-                        # 연동업체 변경 실패 시에도 로그아웃 시도
-                        logger.info("연동업체 변경 실패했지만 쿠팡 로그아웃 시도")
-                        if coupang_manager.logout_coupang():
-                            logger.info("쿠팡 로그아웃 완료")
-                        else:
-                            logger.warning("쿠팡 로그아웃에 실패했지만 계속 진행합니다")
                             
                 except Exception as e:
                     logger.error(f"쿠팡 API 연동업체 변경 및 로그아웃 중 오류 발생: {str(e)}")
@@ -2128,7 +2274,23 @@ class ProductEditorCore6_Dynamic2:
                     time.sleep(60)  # 60초 대기 후 재시도
             
             if not profile_detected:
-                logger.warning(f"최대 {max_attempts}회 시도 후에도 배송 프로필을 감지하지 못했습니다. 다음 단계로 진행합니다.")
+                logger.warning(f"최대 {max_attempts}회 시도 후에도 배송 프로필을 감지하지 못했습니다. 쿠팡 로그아웃을 수행합니다.")
+                
+                # 20회 실패 시 쿠팡 로그아웃 수행
+                try:
+                    from market_manager_coupang import MarketManagerCoupang
+                    coupang_manager = MarketManagerCoupang(self.driver)
+                    logout_success = coupang_manager.logout_coupang()
+                    
+                    if logout_success:
+                        logger.info("쿠팡 로그아웃 완료")
+                    else:
+                        logger.warning("쿠팡 로그아웃 실패")
+                        
+                except Exception as logout_error:
+                    logger.error(f"쿠팡 로그아웃 중 오류 발생: {logout_error}")
+                
+                return False
             else:
                 logger.info("쿠팡 API 검증 및 배송 프로필 감지 완료")
             

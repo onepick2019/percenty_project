@@ -32,7 +32,7 @@ class EnhancedPeriodicExecutionManager:
         self.config_path = config_path
         self.config = {}
         self.account_manager = AccountManager()
-        self.continue_on_timeout_steps = ['21', '22', '23', '31', '32', '33']
+        self.continue_on_timeout_steps = ['21', '22', '23', '31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333']
         
         # 로깅 설정
         logging.basicConfig(
@@ -62,14 +62,17 @@ class EnhancedPeriodicExecutionManager:
         """기본 설정 생성"""
         self.config = {
             "batch_quantity": 100,
-            "selected_steps": ["1", "21", "22", "23", "31", "32", "33", "4", "51", "52", "53"],
+            "selected_steps": ["1", "21", "22", "23", "31", "32", "33", "311", "312", "313", "321", "322", "323", "331", "332", "333", "4", "51", "52", "53"],
             "selected_accounts": "all",
             "schedule_time": "00:32",
             "step_interval": 30,
-            "continue_on_timeout_steps": ["21", "22", "23", "31", "32", "33"],
+            "continue_on_timeout_steps": ["21", "22", "23", "31", "32", "33", "311", "312", "313", "321", "322", "323", "331", "332", "333"],
             "step_timeout_settings": {
                 "21": 3600, "22": 3600, "23": 3600,
                 "31": 3600, "32": 3600, "33": 3600,
+                "311": 3600, "312": 3600, "313": 3600,
+                "321": 3600, "322": 3600, "323": 3600,
+                "331": 3600, "332": 3600, "333": 3600,
                 "default": 1800
             }
         }

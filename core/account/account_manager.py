@@ -114,7 +114,8 @@ class CoreAccountManager:
                     continue
                 
                 account_info = {
-                    'id': account_id,
+                    'id': email,  # 실제 이메일 주소를 ID로 사용 (진행 상황 파일명에 사용됨)
+                    'virtual_id': account_id,  # 가상 ID는 별도 필드로 저장
                     'email': email,
                     'password': password,
                     'name': name,

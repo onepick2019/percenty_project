@@ -42,6 +42,8 @@ class ScheduleManager:
         self.scheduler_thread = None
         self.is_running = False
         self.callback_function = None
+        self.is_callback_running = False  # 콜백 실행 상태 추적
+        self.last_execution_time = None   # 마지막 실행 시간 추적
         
         # schedule 라이브러리가 없으면 내장 스케줄러 사용
         if schedule is None:
@@ -57,13 +59,44 @@ class ScheduleManager:
             callback: 실행할 콜백 함수
         """
         try:
+            # 안전한 콜백 래퍼 생성 (중복 실행 방지)
+            def safe_callback():
+                from datetime import datetime
+                
+                # 이미 실행 중인지 확인
+                if self.is_callback_running:
+                    logger.warning("이전 주기적 실행이 아직 진행 중입니다. 중복 실행을 방지합니다.")
+                    return
+                
+                # 최근 실행 시간 확인 (1시간 이내 중복 실행 방지)
+                current_time = datetime.now()
+                if self.last_execution_time:
+                    time_diff = current_time - self.last_execution_time
+                    if time_diff.total_seconds() < 3600:  # 1시간
+                        logger.warning(f"최근 실행 후 {time_diff.total_seconds():.0f}초 경과. 중복 실행을 방지합니다.")
+                        return
+                
+                # 콜백 실행 상태 설정
+                self.is_callback_running = True
+                self.last_execution_time = current_time
+                
+                try:
+                    logger.info(f"주기적 실행 시작: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    callback()
+                    logger.info(f"주기적 실행 완료: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                except Exception as e:
+                    logger.error(f"주기적 실행 중 오류: {e}")
+                finally:
+                    # 실행 상태 해제
+                    self.is_callback_running = False
+            
             if schedule is not None:
                 # schedule 라이브러리 사용
                 # 기존 스케줄 정리
                 schedule.clear()
                 
-                # 새 스케줄 등록
-                schedule.every().day.at(time_str).do(callback)
+                # 새 스케줄 등록 (안전한 콜백 사용)
+                schedule.every().day.at(time_str).do(safe_callback)
                 
                 self.callback_function = callback
                 self.is_running = True
@@ -77,8 +110,8 @@ class ScheduleManager:
                 self.scheduler_thread.start()
                 
             else:
-                # 내장 스케줄러 사용
-                self.simple_scheduler.schedule_daily(time_str, callback)
+                # 내장 스케줄러 사용 (안전한 콜백 사용)
+                self.simple_scheduler.schedule_daily(time_str, safe_callback)
                 self.callback_function = callback
                 self.is_running = True
             
@@ -102,7 +135,11 @@ class ScheduleManager:
                 # 스레드가 자연스럽게 종료되도록 대기
                 self.scheduler_thread.join(timeout=2.0)
             
+            # 콜백 실행 상태 초기화
             self.callback_function = None
+            self.is_callback_running = False
+            self.last_execution_time = None
+            
             logger.info("스케줄이 중지되었습니다.")
             
         except Exception as e:
@@ -202,6 +239,8 @@ class PeriodicExecutionManager:
             config: {
                 'step1_quantity': int,      # 1단계 전용 배치 수량
                 'other_quantity': int,      # 나머지 단계 공통 배치 수량
+                'step3_product_limit': int, # 3단계 상품 수량 제한
+                'step3_image_limit': int,   # 3단계 이미지 번역 제한
                 'selected_steps': List[str],
                 'selected_accounts': List[str],
                 'schedule_time': str,       # "HH:MM" 형식
@@ -314,17 +353,28 @@ class PeriodicExecutionManager:
             self._log("이미 실행 중입니다. 중복 실행을 방지합니다.")
             return False
         
+        # 실행 중인 프로세스가 있으면 중복 실행 방지
+        with self.process_lock:
+            if self.running_processes:
+                active_processes = [p for p in self.running_processes if p.poll() is None]
+                if active_processes:
+                    self._log(f"실행 중인 프로세스 {len(active_processes)}개가 있습니다. 중복 실행을 방지합니다.")
+                    return False
+        
         self.is_executing = True
         
         try:
             # 단계별 배치수량 설정
             step1_quantity = self.config.get('step1_quantity', 300)
             other_quantity = self.config.get('other_quantity', 100)
+            step3_product_limit = self.config.get('step3_product_limit', 200)
+            step3_image_limit = self.config.get('step3_image_limit', 2000)
             selected_steps = self.config.get('selected_steps', [])
             selected_accounts = self.config.get('selected_accounts', [])
             step_interval = self.config.get('step_interval', 10)
             
-            self._log(f"배치 실행 시작: 1단계={step1_quantity}개, 나머지단계={other_quantity}개, 단계={selected_steps}, 계정={len(selected_accounts)}개")
+            self._log(f"배치 실행 시작: 1단계={step1_quantity}개, 나머지단계={other_quantity}개, 3단계 상품제한={step3_product_limit}개, 3단계 이미지제한={step3_image_limit}개")
+            self._log(f"단계={selected_steps}, 계정={len(selected_accounts)}개")
             self._log(f"각 계정은 독립적인 프로세스에서 동시 실행됩니다.")
             
             # 각 계정을 별도 스레드에서 동시 실행
@@ -338,7 +388,7 @@ class PeriodicExecutionManager:
                     account_success = True
                     
                     # 타임아웃에도 계속 진행할 스텝들 (상품 수량이 가변적인 스텝들)
-                    continue_on_timeout_steps = ['21', '22', '23', '31', '32', '33']
+                    continue_on_timeout_steps = ['21', '22', '23', '31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333']
                     
                     # 선택된 단계들을 순차적으로 실행
                     for step in selected_steps:
@@ -358,7 +408,7 @@ class PeriodicExecutionManager:
                         
                         # 단계에 따라 배치수량 결정
                         current_batch_quantity = step1_quantity if step == '1' else other_quantity
-                        success = self._execute_single_step(account_id, step, current_batch_quantity)
+                        success = self._execute_single_step(account_id, step, current_batch_quantity, step3_product_limit, step3_image_limit)
                         
                         # 단계 6-2 실행 성공 시 마지막 실행 시간 업데이트
                         if step == '62' and success:
@@ -428,13 +478,15 @@ class PeriodicExecutionManager:
         finally:
             self.is_executing = False
     
-    def _execute_single_step(self, account_id: str, step: str, quantity: int) -> bool:
+    def _execute_single_step(self, account_id: str, step: str, quantity: int, step3_product_limit: int = 200, step3_image_limit: int = 2000) -> bool:
         """단일 단계 실행
         
         Args:
             account_id: 계정 ID
             step: 실행할 단계
             quantity: 배치 수량
+            step3_product_limit: 3단계 상품 수량 제한
+            step3_image_limit: 3단계 이미지 번역 제한
             
         Returns:
             bool: 실행 성공 여부
@@ -449,7 +501,13 @@ class PeriodicExecutionManager:
             
             # 청크 사이즈 가져오기
             chunk_sizes = self.config.get('chunk_sizes', {})
-            chunk_size = chunk_sizes.get(step, 10)  # 기본값 10
+            
+            # 61, 62, 63단계는 마켓 설정 기반으로 1회만 실행되어야 함
+            if step in ['61', '62', '63']:
+                chunk_size = 1  # 청크 사이즈를 1로 고정하여 1회만 실행
+                self._log(f"단계 {step}는 마켓 설정 기반 단계로 청크 사이즈를 1로 설정")
+            else:
+                chunk_size = chunk_sizes.get(step, 10)  # 기본값 10
             
             # 가상 계정 ID를 실제 이메일로 변환
             real_account_id = get_real_account_id(account_id)
@@ -467,6 +525,13 @@ class PeriodicExecutionManager:
             
             # 모든 단계에 청크 사이즈 추가 (4단계 제외하지 않음)
             cmd.extend(["--chunk-size", str(chunk_size)])
+            
+            # 3단계 관련 단계들에 이중 제한 설정 추가
+            step3_steps = ['31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333']
+            if step in step3_steps:
+                cmd.extend(["--step3-product-limit", str(step3_product_limit)])
+                cmd.extend(["--step3-image-limit", str(step3_image_limit)])
+                self._log(f"3단계 이중 제한 적용: 상품 {step3_product_limit}개, 이미지 번역 {step3_image_limit}개")
             
             self._log(f"실행 명령: {' '.join(cmd)}")
             
@@ -497,11 +562,14 @@ class PeriodicExecutionManager:
                     if process in self.running_processes:
                         self.running_processes.remove(process)
                 
+                # 프로세스 완료 후 관련 브라우저 프로세스 정리 (정상 완료/실패 모두)
+                self._cleanup_browser_processes(account_id)
+                
                 if process.returncode == 0:
-                    self._log(f"단계 {step} 실행 성공 (계정 {account_id}, PID {process.pid})")
+                    self._log(f"단계 {step} 실행 성공 (계정 {account_id}, PID {process.pid}) - 브라우저 프로세스 정리 완료")
                     return True
                 else:
-                    self._log(f"단계 {step} 실행 실패 (계정 {account_id}, PID {process.pid}): 반환코드 {process.returncode}")
+                    self._log(f"단계 {step} 실행 실패 (계정 {account_id}, PID {process.pid}): 반환코드 {process.returncode} - 브라우저 프로세스 정리 완료")
                     return False
                     
             except subprocess.TimeoutExpired:
@@ -531,6 +599,11 @@ class PeriodicExecutionManager:
                 return False
         except Exception as e:
             self._log(f"단계 {step} 실행 중 오류 (계정 {account_id}): {e}")
+            # 예외 발생 시에도 브라우저 프로세스 정리
+            try:
+                self._cleanup_browser_processes(account_id)
+            except Exception as cleanup_error:
+                self._log(f"예외 처리 중 브라우저 정리 오류: {cleanup_error}")
             return False
     
     def _calculate_chunk_timeout(self, step: str, quantity: int, chunk_size: int) -> int:
@@ -552,35 +625,53 @@ class PeriodicExecutionManager:
             '31': 540,   # 9분/아이템 (키워드 검색으로 시간 편차 큼)
             '32': 540,   # 9분/아이템 (키워드 검색으로 시간 편차 큼)
             '33': 540,   # 9분/아이템 (키워드 검색으로 시간 편차 큼)
+            '311': 540,  # 9분/아이템 (3단계 세분화 - 서버1-1)
+            '312': 540,  # 9분/아이템 (3단계 세분화 - 서버1-2)
+            '313': 540,  # 9분/아이템 (3단계 세분화 - 서버1-3)
+            '321': 540,  # 9분/아이템 (3단계 세분화 - 서버2-1)
+            '322': 540,  # 9분/아이템 (3단계 세분화 - 서버2-2)
+            '323': 540,  # 9분/아이템 (3단계 세분화 - 서버2-3)
+            '331': 540,  # 9분/아이템 (3단계 세분화 - 서버3-1)
+            '332': 540,  # 9분/아이템 (3단계 세분화 - 서버3-2)
+            '333': 540,  # 9분/아이템 (3단계 세분화 - 서버3-3)
             '1': 195,    # 3.25분/아이템 (초기 데이터 처리 + 휴먼딜레이 45-60초)
             '4': 135,    # 2.25분/아이템 (번역 처리, 휴먼딜레이 미적용)
             '51': 285,   # 4.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-160초)
             '52': 315,   # 5.25분/아이템 (최종 처리 단계 + 휴먼딜레이 152-170초)
             '53': 345,   # 5.75분/아이템 (최종 처리 단계 + 휴먼딜레이 152-180초)
-            '61': 300,   # 5분/아이템 (동적 업로드 처리)
-            '62': 300,   # 5분/아이템 (동적 업로드 처리)
-            '63': 300    # 5분/아이템 (동적 업로드 처리)
+            '61': 12000,  # 200분/마켓설정 (동적 업로드 처리 - 마켓당 10회 업로드 * 20분)
+            '62': 12000,  # 200분/마켓설정 (동적 업로드 처리 - 마켓당 10회 업로드 * 20분)
+            '63': 12000   # 200분/마켓설정 (동적 업로드 처리 - 마켓당 10회 업로드 * 20분)
         }
         
         # 청크 수 계산
-        total_chunks = (quantity + chunk_size - 1) // chunk_size
+        # 61, 62, 63단계는 마켓 설정 기반으로 1회만 실행되므로 청크 수를 1로 설정
+        if step in ['61', '62', '63']:
+            total_chunks = 1
+        else:
+            total_chunks = (quantity + chunk_size - 1) // chunk_size
         
         # 단일 아이템 처리 시간
         base_time_per_item = base_timeouts_per_item.get(step, 90)  # 기본 1.5분/아이템
         
-        # 전체 배치 타임아웃 계산 (총 수량 * 아이템당 시간 + 청크별 오버헤드)
-        total_timeout = quantity * base_time_per_item
-        
-        # 청크별 브라우저 재시작 오버헤드 추가 (청크당 5분)
-        chunk_overhead = total_chunks * 300
-        total_timeout += chunk_overhead
+        # 전체 배치 타임아웃 계산
+        if step in ['61', '62', '63']:
+            # 61, 62, 63단계는 마켓 설정 기반으로 1회만 실행되므로 고정 타임아웃 사용
+            # 마켓 설정당 200분 * 최대 20개 마켓 설정 = 최대 66.67시간 (240000초)
+            total_timeout = base_time_per_item * 20  # 최대 20개 마켓 설정을 고려한 충분한 타임아웃
+        else:
+            # 다른 단계는 기존 로직 사용 (총 수량 * 아이템당 시간 + 청크별 오버헤드)
+            total_timeout = quantity * base_time_per_item
+            # 청크별 브라우저 재시작 오버헤드 추가 (청크당 5분)
+            chunk_overhead = total_chunks * 300
+            total_timeout += chunk_overhead
         
         # 최소 타임아웃 보장 (20분)
         min_timeout = 1200
         total_timeout = max(total_timeout, min_timeout)
         
-        # 최대 타임아웃 제한 (48시간) - 대용량 배치 작업 지원
-        max_timeout = 172800
+        # 최대 타임아웃 제한 (72시간) - 61,62,63단계의 대용량 마켓 처리 지원
+        max_timeout = 259200
         total_timeout = min(total_timeout, max_timeout)
         
         return total_timeout

@@ -77,7 +77,7 @@ class ImageTranslationHandler:
             context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
-            bool: 성공 여부
+            int: 실제 번역된 이미지 개수 (실패 시 0)
         """
         try:
             self.logger.info(f"이미지 번역 시작 - 액션: {action_value}, 컨텍스트: {context}")
@@ -86,28 +86,28 @@ class ImageTranslationHandler:
             action_info = self._parse_image_translate_action(action_value)
             if not action_info:
                 self.logger.error("이미지 번역 액션 파싱 실패")
-                return False
+                return 0
             
             # 컨텍스트별 모달창 열기
             if context == 'detail':
                 # 상세페이지: 일괄편집 모달창 열기
                 if not self._open_bulk_edit_modal(context):
-                    return False
+                    return 0
             else:
                 # 썸네일/옵션: 바로 편집하기 버튼 클릭
                 if not self._open_direct_edit_modal(context):
-                    return False
+                    return 0
                 
             try:
-                # 이미지 번역 액션 처리
-                success = self._process_image_translate_action(action_info, context)
+                # 이미지 번역 액션 처리 - 실제 번역된 개수 반환
+                translated_count = self._process_image_translate_action(action_info, context)
                 
-                if success:
-                    self.logger.info("이미지 번역 완료")
+                if translated_count > 0:
+                    self.logger.info(f"이미지 번역 완료: {translated_count}개")
                 else:
-                    self.logger.error("이미지 번역 실패")
+                    self.logger.info("번역할 이미지가 없습니다 (중국어 텍스트 미감지)")
                 
-                return success
+                return translated_count
                 
             finally:
                 # 모달 닫기 - 주석처리 (product_editor_core3에서 통합 관리)
@@ -116,7 +116,7 @@ class ImageTranslationHandler:
                 
         except Exception as e:
             self.logger.error(f"이미지 번역 중 오류 - 컨텍스트: {context}, 오류: {e}")
-            return False
+            return 0
             
     def _parse_image_translate_action(self, action_value):
         """이미지 번역 액션 값 파싱 (기존 방식 호환, '/' 구분자 지원)"""
@@ -242,7 +242,7 @@ class ImageTranslationHandler:
             context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
-            bool: 성공 여부
+            int: 실제 번역된 이미지 개수
         """
         try:
             positions = action_info.get('positions', [])
@@ -271,7 +271,7 @@ class ImageTranslationHandler:
                 
         except Exception as e:
             self.logger.error(f"이미지 번역 액션 처리 오류: {e}")
-            return False
+            return 0
             
     # def _process_specific_positions(self, positions):
     #     """개별 위치 처리 (기존 방식) - 통합 방식으로 대체됨"""
@@ -325,7 +325,7 @@ class ImageTranslationHandler:
             context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
-            bool: 성공 여부
+            int: 실제 번역된 이미지 개수
         """
         try:
             if context == 'detail':
@@ -345,14 +345,14 @@ class ImageTranslationHandler:
                     # K열(detail)의 경우 이미지가 0개여도 저장 버튼 클릭 후 모달 닫기
                     self._save_changes()
                     self._close_image_translation_modal()
-                    return True
+                    return 0
             else:
                 # 썸네일/옵션 탭: 해당 탭에서 먼저 이미지 개수 확인 후 편집하기 버튼 클릭
                 # 먼저 해당 탭에서 이미지 개수 확인 (모달창 열기 전)
                 total_images = self._get_tab_image_count(context)
                 if total_images == 0:
                     self.logger.warning(f"{context} 탭에 이미지가 없습니다")
-                    return False
+                    return 0
                     
                 self.logger.info(f"{context} 탭에서 총 {total_images}개의 이미지 발견")
                 
@@ -377,7 +377,7 @@ class ImageTranslationHandler:
                 if context == 'detail':
                     self._save_changes()
                 self._close_image_translation_modal()
-                return True
+                return 0
                 
             # 2단계: 식별된 이미지들만 번역 처리
             processed_count = self._process_specific_images_for_translation(images_to_translate)
@@ -389,11 +389,11 @@ class ImageTranslationHandler:
             self._close_image_translation_modal()
             
             self.logger.info(f"제한된 이미지 순차 처리 완료: {processed_count}/{len(images_to_translate)}개 성공")
-            return processed_count > 0
+            return processed_count
             
         except Exception as e:
             self.logger.error(f"제한된 이미지 순차 처리 오류: {e}")
-            return False
+            return 0
     
     def _process_all_images_sequentially(self, context='detail'):
         """모든 이미지 순차 처리
@@ -402,7 +402,7 @@ class ImageTranslationHandler:
             context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
-            bool: 성공 여부
+            int: 실제 번역된 이미지 개수
         """
         try:
             if context == 'detail':
@@ -419,14 +419,14 @@ class ImageTranslationHandler:
                 total_images = self._get_total_image_count(context)
                 if total_images == 0:
                     self.logger.warning("이미지가 없습니다")
-                    return False
+                    return 0
             else:
                 # 썸네일/옵션 탭: 해당 탭에서 먼저 이미지 개수 확인 후 편집하기 버튼 클릭
                 # 먼저 해당 탭에서 이미지 개수 확인 (모달창 열기 전)
                 total_images = self._get_tab_image_count(context)
                 if total_images == 0:
                     self.logger.warning(f"{context} 탭에 이미지가 없습니다")
-                    return False
+                    return 0
                     
                 self.logger.info(f"{context} 탭에서 총 {total_images}개의 이미지 발견")
                 
@@ -451,7 +451,7 @@ class ImageTranslationHandler:
                     self._close_image_translation_modal()
                 else:
                     self._close_image_translation_modal()
-                return True
+                return 0
                 
             self.logger.info(f"번역 대상 이미지: specific:{','.join(map(str, images_to_translate))}")
             
@@ -467,11 +467,11 @@ class ImageTranslationHandler:
                 self._close_image_translation_modal()
             
             self.logger.info(f"스캔 및 번역 처리 완료: {processed_count}/{len(images_to_translate)}개 처리됨 - 컨텍스트: {context}")
-            return processed_count > 0
+            return processed_count
             
         except Exception as e:
             self.logger.error(f"스캔 및 번역 처리 오류 - 컨텍스트: {context}, 오류: {e}")
-            return False
+            return 0
             
     def _process_specific_positions_unified(self, positions, context='detail'):
         """특정 위치 이미지만 처리하는 통합 방식
@@ -481,7 +481,7 @@ class ImageTranslationHandler:
             context (str): 처리 컨텍스트 ('detail', 'thumbnail', 'option')
             
         Returns:
-            bool: 성공 여부
+            int: 실제 번역된 이미지 개수
         """
         try:
             self.logger.info(f"특정 위치 이미지 번역 처리 시작 - 위치: {positions}, 컨텍스트: {context}")
@@ -554,11 +554,11 @@ class ImageTranslationHandler:
                 self._close_image_translation_modal()
             
             self.logger.info(f"특정 위치 이미지 번역 처리 완료: {processed_count}/{len(converted_positions)}개 처리됨")
-            return processed_count > 0
+            return processed_count
             
         except Exception as e:
             self.logger.error(f"특정 위치 이미지 번역 처리 오류: {e}")
-            return False
+            return 0
             
     def _check_modal_open(self):
         """이미지 번역 모달창이 열려있는지 확인 (실제 이미지 번역 모달창만 감지)"""
@@ -1153,7 +1153,7 @@ class ImageTranslationHandler:
                 return self._execute_translation()
             else:
                 self.logger.info("중국어 텍스트 없음 - 건너뜀")
-                return True
+                return 0
                 
         except Exception as e:
             self.logger.error(f"이미지 처리 실패: {e}")
@@ -1293,11 +1293,14 @@ class ImageTranslationHandler:
             time.sleep(0.1)
             
             # 번역 완료 대기
-            return self._wait_for_translation_complete()
+            if self._wait_for_translation_complete():
+                return 1  # 번역 성공 시 1개 번역됨
+            else:
+                return 0  # 번역 실패 시 0개 번역됨
             
         except Exception as e:
             self.logger.error(f"번역 실행 실패: {e}")
-            return False
+            return 0
             
     def _wait_for_translation_complete(self):
         """번역 완료 대기 - '원클릭 이미지 번역' 버튼 상태 변화 감지"""
@@ -1544,12 +1547,11 @@ class ImageTranslationHandler:
                         continue
                     
                     # 번역 완료 대기
-                    if not self._wait_for_translation_complete():
+                    if self._wait_for_translation_complete():
+                        processed_count += 1
+                        self.logger.info(f"이미지 위치 {position} 번역 성공")
+                    else:
                         self.logger.error(f"이미지 위치 {position} 번역 완료 대기 실패")
-                        continue
-                    
-                    processed_count += 1
-                    self.logger.info(f"이미지 위치 {position} 번역 성공")
                     
                 except Exception as e:
                     self.logger.error(f"이미지 위치 {position} 번역 처리 오류: {e}")

@@ -20,10 +20,21 @@ from browser_core import BrowserCore
 # 계정 관리자 임포트
 from account_manager import AccountManager
 
-# Step 3 코어 기능 임포트
+# Step 3 코어 기능 임포트 (기존 3개 + 새로운 9개 세분화 코어)
 from core.steps.step3_1_core import Step3_1Core
 from core.steps.step3_2_core import Step3_2Core
 from core.steps.step3_3_core import Step3_3Core
+
+# Step 3 세분화 코어 기능 임포트 (서버1-1, 서버1-2, 서버1-3, 서버2-1, 서버2-2, 서버2-3, 서버3-1, 서버3-2, 서버3-3)
+from core.steps.step3_1_1_core import Step3_1_1Core
+from core.steps.step3_1_2_core import Step3_1_2Core
+from core.steps.step3_1_3_core import Step3_1_3Core
+from core.steps.step3_2_1_core import Step3_2_1Core
+from core.steps.step3_2_2_core import Step3_2_2Core
+from core.steps.step3_2_3_core import Step3_2_3Core
+from core.steps.step3_3_1_core import Step3_3_1Core
+from core.steps.step3_3_2_core import Step3_3_2Core
+from core.steps.step3_3_3_core import Step3_3_3Core
 
 # 로그인 기능 임포트
 from login_percenty import PercentyLogin
@@ -53,9 +64,20 @@ class Step3BatchRunner:
         self.browser_core = None
         self.current_account_id = None
         self.step_cores = {
+            # 기존 3개 서버
             "서버1": None,
             "서버2": None,
-            "서버3": None
+            "서버3": None,
+            # 새로운 9개 세분화 서버
+            "서버1-1": None,
+            "서버1-2": None,
+            "서버1-3": None,
+            "서버2-1": None,
+            "서버2-2": None,
+            "서버2-3": None,
+            "서버3-1": None,
+            "서버3-2": None,
+            "서버3-3": None
         }
         
     def setup_browser(self) -> bool:
@@ -169,18 +191,21 @@ class Step3BatchRunner:
             logger.error(f"등록상품관리 메뉴 이동 중 오류: {e}")
             return False
     
-    def setup_step_cores(self, account_info: Dict) -> bool:
+    def setup_step_cores(self, account_info: Dict, target_server: str = None, step3_product_limit: int = None, step3_image_limit: int = None) -> bool:
         """
-        서버별 Step Core 객체들 설정
+        서버별 Step Core 객체들 설정 (필요한 서버만)
         
         Args:
             account_info: 계정 정보
+            target_server: 대상 서버 (None이면 기본 3개 서버만 설정)
+            step3_product_limit: 3단계 상품 수량 제한
+            step3_image_limit: 3단계 이미지 번역 수량 제한
             
         Returns:
             bool: 성공 여부
         """
         try:
-            logger.info("서버별 Step Core 객체들 설정 시작")
+            logger.info(f"서버별 Step Core 객체들 설정 시작 (대상: {target_server or '기본 3개 서버'})")
             
             # 드라이버 준비 상태 확인
             if not self.driver:
@@ -195,26 +220,53 @@ class Step3BatchRunner:
                 logger.error(f"드라이버 연결 상태 확인 실패: {e}")
                 return False
             
-            # 서버1 코어 설정
-            self.step_cores["서버1"] = Step3_1Core(driver=self.driver, server_name="서버1", restart_browser_callback=self.restart_browser)
-            logger.info("서버1 코어 설정 완료")
+            # 서버별 코어 클래스 매핑
+            core_mapping = {
+                "서버1": Step3_1Core,
+                "서버2": Step3_2Core,
+                "서버3": Step3_3Core,
+                "서버1-1": Step3_1_1Core,
+                "서버1-2": Step3_1_2Core,
+                "서버1-3": Step3_1_3Core,
+                "서버2-1": Step3_2_1Core,
+                "서버2-2": Step3_2_2Core,
+                "서버2-3": Step3_2_3Core,
+                "서버3-1": Step3_3_1Core,
+                "서버3-2": Step3_3_2Core,
+                "서버3-3": Step3_3_3Core
+            }
             
-            # 서버2 코어 설정
-            self.step_cores["서버2"] = Step3_2Core(driver=self.driver, server_name="서버2", restart_browser_callback=self.restart_browser)
-            logger.info("서버2 코어 설정 완료")
+            # 설정할 서버 목록 결정
+            if target_server:
+                # 특정 서버만 설정
+                servers_to_setup = [target_server]
+            else:
+                # 기본 3개 서버만 설정
+                servers_to_setup = ["서버1", "서버2", "서버3"]
             
-            # 서버3 코어 설정
-            self.step_cores["서버3"] = Step3_3Core(driver=self.driver, server_name="서버3", restart_browser_callback=self.restart_browser)
-            logger.info("서버3 코어 설정 완료")
+            # 선택된 서버들만 설정
+            for server_name in servers_to_setup:
+                if server_name in core_mapping:
+                    core_class = core_mapping[server_name]
+                    self.step_cores[server_name] = core_class(
+                        driver=self.driver, 
+                        server_name=server_name, 
+                        restart_browser_callback=self.restart_browser,
+                        step3_product_limit=step3_product_limit,
+                        step3_image_limit=step3_image_limit
+                    )
+                    logger.info(f"{server_name} 코어 설정 완료 (상품 제한: {step3_product_limit}, 이미지 제한: {step3_image_limit})")
+                else:
+                    logger.warning(f"알 수 없는 서버명: {server_name}")
             
-            logger.info("모든 서버 코어 설정 완료")
+            logger.info(f"선택된 서버 코어 설정 완료 ({len(servers_to_setup)}개)")
             return True
             
         except Exception as e:
             logger.error(f"Step Core 객체 설정 중 오류: {e}")
             return False
     
-    def run_batch_processing(self, account_info: Dict, server_name: str = None, chunk_size: int = 5, reset_progress: bool = True) -> Dict:
+    def run_batch_processing(self, account_info: Dict, server_name: str = None, chunk_size: int = 5, reset_progress: bool = True, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
         """
         배치 처리 실행
         
@@ -223,6 +275,8 @@ class Step3BatchRunner:
             server_name: 특정 서버만 처리 (None이면 모든 서버)
             chunk_size: 청크 크기
             reset_progress: 진행 상황 초기화 여부 (기본값: True)
+            step3_product_limit: 3단계 상품 수량 제한
+            step3_image_limit: 3단계 이미지 번역 수량 제한
             
         Returns:
             Dict: 처리 결과
@@ -245,7 +299,11 @@ class Step3BatchRunner:
                 self._reset_progress_files(account_info, server_name)
             
             # 처리할 서버 목록 결정
-            servers_to_process = [server_name] if server_name else ["서버1", "서버2", "서버3"]
+            if server_name:
+                servers_to_process = [server_name]
+            else:
+                # 기본적으로는 기존 3개 서버 처리, 세분화된 서버는 명시적으로 지정해야 함
+                servers_to_process = ["서버1", "서버2", "서버3"]
             
             for server in servers_to_process:
                 try:
@@ -280,6 +338,7 @@ class Step3BatchRunner:
                     remaining_keywords = provider_codes.copy()
                     
                     while remaining_keywords:
+                        # 서버별 적절한 메서드 호출
                         if server == "서버1":
                             current_result = step_core.execute_step3_1_with_browser_restart(
                                 provider_codes=remaining_keywords,
@@ -292,12 +351,72 @@ class Step3BatchRunner:
                                 chunk_size=chunk_size,
                                 account_info=account_info
                             )
-                        else:
+                        elif server == "서버3":
                             current_result = step_core.execute_step3_3_with_browser_restart(
                                 provider_codes=remaining_keywords,
                                 chunk_size=chunk_size,
                                 account_info=account_info
                             )
+                        # 새로운 세분화된 서버들 처리
+                        elif server == "서버1-1":
+                            current_result = step_core.execute_step3_1_1_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버1-2":
+                            current_result = step_core.execute_step3_1_2_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버1-3":
+                            current_result = step_core.execute_step3_1_3_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버2-1":
+                            current_result = step_core.execute_step3_2_1_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버2-2":
+                            current_result = step_core.execute_step3_2_2_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버2-3":
+                            current_result = step_core.execute_step3_2_3_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버3-1":
+                            current_result = step_core.execute_step3_3_1_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버3-2":
+                            current_result = step_core.execute_step3_3_2_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        elif server == "서버3-3":
+                            current_result = step_core.execute_step3_3_3_with_browser_restart(
+                                provider_codes=remaining_keywords,
+                                chunk_size=chunk_size,
+                                account_info=account_info
+                            )
+                        else:
+                            error_msg = f"지원하지 않는 서버: {server}"
+                            logger.error(error_msg)
+                            current_result = {'success': False, 'errors': [error_msg]}
+                            break
                         
                         # 브라우저 재시작이 필요한 경우
                         if current_result.get('restart_required', False):
@@ -399,9 +518,9 @@ class Step3BatchRunner:
             List[str]: 키워드 목록
         """
         try:
-            # ProductEditorCore3를 임시로 생성하여 작업 목록 로드
+            # ProductEditorCore3를 임시로 생성하여 작업 목록 로드 (드라이버 없이)
             from product_editor_core3 import ProductEditorCore3
-            temp_core = ProductEditorCore3(self.driver)
+            temp_core = ProductEditorCore3(None)  # 드라이버 전달하지 않음
             
             task_list = temp_core.load_task_list_from_excel_with_server_filter(
                 account_id=account_info['id'],
@@ -571,7 +690,16 @@ class Step3BatchRunner:
             self.step_cores = {
                 "서버1": None,
                 "서버2": None,
-                "서버3": None
+                "서버3": None,
+                "서버1-1": None,
+                "서버1-2": None,
+                "서버1-3": None,
+                "서버2-1": None,
+                "서버2-2": None,
+                "서버2-3": None,
+                "서버3-1": None,
+                "서버3-2": None,
+                "서버3-3": None
             }
             
             # 브라우저 정리
@@ -638,6 +766,8 @@ def main():
     parser.add_argument('--account', type=str, required=True, help='계정 번호 또는 이메일')
     parser.add_argument('--server', type=str, required=True, help='서버 번호 (1, 2, 3)')
     parser.add_argument('--chunk-size', type=int, default=5, help='청크 크기 (기본값: 5)')
+    parser.add_argument('--step3-product-limit', type=int, default=None, help='3단계 상품 수량 제한')
+    parser.add_argument('--step3-image-limit', type=int, default=None, help='3단계 이미지 번역 수량 제한')
     parser.add_argument('--debug', action='store_true', help='디버그 모드')
     parser.add_argument('--verbose', action='store_true', help='상세 로그')
     parser.add_argument('--gui', action='store_true', help='GUI 모드에서 실행 (프로세스 강제 종료 비활성화)')
@@ -683,8 +813,14 @@ def main():
         
         print(f"선택된 계정: {selected_account['id']}")
         
-        # 서버 선택
-        server_map = {'1': '서버1', '2': '서버2', '3': '서버3'}
+        # 서버 선택 (세분화 단계 포함)
+        server_map = {
+            '1': '서버1', '2': '서버2', '3': '서버3',
+            '31': '서버1', '32': '서버2', '33': '서버3',
+            '311': '서버1-1', '312': '서버1-2', '313': '서버1-3',
+            '321': '서버2-1', '322': '서버2-2', '323': '서버2-3',
+            '331': '서버3-1', '332': '서버3-2', '333': '서버3-3'
+        }
         selected_server = server_map.get(args.server)
         
         if not selected_server:
@@ -708,8 +844,10 @@ def main():
             logger.error("로그인 및 페이지 이동 실패")
             return
         
-        # Step Core 객체들 설정
-        if not runner.setup_step_cores(selected_account):
+        # Step Core 객체들 설정 (선택된 서버만)
+        step3_product_limit = getattr(args, 'step3_product_limit', None)
+        step3_image_limit = getattr(args, 'step3_image_limit', None)
+        if not runner.setup_step_cores(selected_account, selected_server, step3_product_limit, step3_image_limit):
             logger.error("Step Core 객체 설정 실패")
             return
         
@@ -718,7 +856,9 @@ def main():
         result = runner.run_batch_processing(
             account_info=selected_account,
             server_name=selected_server,
-            chunk_size=args.chunk_size
+            chunk_size=args.chunk_size,
+            step3_product_limit=step3_product_limit,
+            step3_image_limit=step3_image_limit
         )
         
         # 결과 출력

@@ -47,7 +47,7 @@ class PercentyAdvancedGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Percenty 고급 다중 배치 실행기")
-        self.root.geometry("1000x900")
+        self.root.geometry("1200x900")
         self.root.configure(bg='#f0f0f0')
         
         # 실행 중인 프로세스들
@@ -55,20 +55,20 @@ class PercentyAdvancedGUI:
         self.total_tasks = 0
         self.completed_tasks = 0
         
-        # 주기적 실행 관리자 초기화
-        if PeriodicExecutionManager:
-            self.periodic_manager = PeriodicExecutionManager(log_callback=self._add_log)
-        else:
-            self.periodic_manager = None
-        
         # 설정 파일 경로
         self.config_file = Path("percenty_gui_config.json")
         
         # UI 변수들
         self.setup_variables()
         
-        # UI 초기화
+        # UI 초기화 (log_text 생성을 위해 먼저 실행)
         self._init_ui()
+        
+        # 주기적 실행 관리자 초기화 (UI 초기화 후에 실행)
+        if PeriodicExecutionManager:
+            self.periodic_manager = PeriodicExecutionManager(log_callback=self._add_log)
+        else:
+            self.periodic_manager = None
         
         # 설정 로드
         self.load_configuration()
@@ -163,8 +163,11 @@ class PercentyAdvancedGUI:
         self.load_account_data()
         
         # 단계 선택 (체크박스) - 1-6단계 지원 (2단계는 21, 22, 23으로, 3단계는 31, 32, 33으로, 5단계는 51, 52, 53으로, 6단계는 61, 62, 63으로 분리)
+        # 3단계 세분화: 311, 312, 313, 321, 322, 323, 331, 332, 333 추가
         self.step_vars = {}
-        steps = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']
+        steps = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', 
+                '311', '312', '313', '321', '322', '323', '331', '332', '333',
+                '61', '62', '63']
         for step in steps:
             self.step_vars[step] = tk.BooleanVar(value=False)  # 기본적으로 아무것도 선택하지 않음
         
@@ -221,7 +224,7 @@ class PercentyAdvancedGUI:
         step_frame = ttk.LabelFrame(basic_frame, text="실행할 단계 선택", padding=15)
         step_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # 단계 체크박스들을 배치 (1, 21, 22, 23, 31, 32, 33, 4, 51, 52, 53, 61, 62, 63단계)
+        # 단계 체크박스들을 배치 (1, 21, 22, 23, 31, 32, 33, 4, 51, 52, 53, 61, 62, 63단계 + 3단계 세분화)
         step_labels = {
             '1': '단계 1',
             '21': '단계 2-1 (서버1)',
@@ -230,6 +233,15 @@ class PercentyAdvancedGUI:
             '31': '단계 3-1 (서버1)',
             '32': '단계 3-2 (서버2)',
             '33': '단계 3-3 (서버3)',
+            '311': '단계 3-1-1 (서버1-1)',
+            '312': '단계 3-1-2 (서버1-2)',
+            '313': '단계 3-1-3 (서버1-3)',
+            '321': '단계 3-2-1 (서버2-1)',
+            '322': '단계 3-2-2 (서버2-2)',
+            '323': '단계 3-2-3 (서버2-3)',
+            '331': '단계 3-3-1 (서버3-1)',
+            '332': '단계 3-3-2 (서버3-2)',
+            '333': '단계 3-3-3 (서버3-3)',
             '4': '단계 4',
             '51': '단계 5-1',
             '52': '단계 5-2',
@@ -239,10 +251,12 @@ class PercentyAdvancedGUI:
             '63': '단계 6-3'
         }
         
-        # 체크박스를 배치
+        # 체크박스를 배치 (기존 단계 + 3단계 세분화)
         positions = [
             ('1', 0, 0), ('51', 0, 1), ('52', 0, 2), ('53', 0, 3), ('21', 0, 4), ('22', 0, 5), ('23', 0, 6),
-            ('4', 1, 0), ('31', 1, 1), ('32', 1, 2), ('33', 1, 3), ('61', 1, 4), ('62', 1, 5), ('63', 1, 6)
+            ('4', 1, 0), ('31', 1, 1), ('32', 1, 2), ('33', 1, 3), ('61', 1, 4), ('62', 1, 5), ('63', 1, 6),
+            ('311', 2, 0), ('312', 2, 1), ('313', 2, 2), ('321', 2, 3), ('322', 2, 4), ('323', 2, 5),
+            ('331', 3, 0), ('332', 3, 1), ('333', 3, 2)
         ]
         
         for step, row, col in positions:
@@ -253,7 +267,7 @@ class PercentyAdvancedGUI:
         
         # 단계 선택 버튼들
         step_btn_frame = ttk.Frame(step_frame)
-        step_btn_frame.grid(row=2, column=0, columnspan=7, pady=(10, 0))
+        step_btn_frame.grid(row=4, column=0, columnspan=7, pady=(10, 0))
         
         ttk.Button(step_btn_frame, text="모든 단계 선택", 
                   command=self.select_all_steps, width=12).pack(side=tk.LEFT, padx=5)
@@ -321,9 +335,13 @@ class PercentyAdvancedGUI:
         quantity_main_frame = ttk.LabelFrame(periodic_frame, text="배치 수량 설정", padding=10)
         quantity_main_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # 1단계 전용 배치 수량
-        step1_quantity_frame = ttk.Frame(quantity_main_frame)
-        step1_quantity_frame.pack(fill=tk.X, pady=5)
+        # 첫 번째 행: 1단계 전용 배치 수량과 3단계 상품 수량 제한
+        first_row_frame = ttk.Frame(quantity_main_frame)
+        first_row_frame.pack(fill=tk.X, pady=5)
+        
+        # 1단계 전용 배치 수량 (왼쪽)
+        step1_quantity_frame = ttk.Frame(first_row_frame)
+        step1_quantity_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         ttk.Label(step1_quantity_frame, text="1단계 전용 배치 수량:").pack(side=tk.LEFT, padx=(0, 10))
         
@@ -336,9 +354,28 @@ class PercentyAdvancedGUI:
         
         ttk.Label(step1_quantity_frame, text="개 (1단계에만 적용)", foreground="blue").pack(side=tk.LEFT)
         
-        # 나머지 단계 공통 배치 수량
-        other_quantity_frame = ttk.Frame(quantity_main_frame)
-        other_quantity_frame.pack(fill=tk.X, pady=5)
+        # 3단계 상품 수량 제한 (오른쪽)
+        product_limit_frame = ttk.Frame(first_row_frame)
+        product_limit_frame.pack(side=tk.RIGHT, padx=(20, 0))
+        
+        ttk.Label(product_limit_frame, text="3단계 상품 수량 제한:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 상품 수량 제한 변수 초기화
+        if not hasattr(self, 'periodic_product_limit_var'):
+            self.periodic_product_limit_var = tk.StringVar(value="200")
+        
+        product_limit_entry = ttk.Entry(product_limit_frame, textvariable=self.periodic_product_limit_var, width=10)
+        product_limit_entry.pack(side=tk.LEFT, padx=(0, 10))
+        
+        ttk.Label(product_limit_frame, text="개 (키워드 순환 처리)", foreground="purple").pack(side=tk.LEFT)
+        
+        # 두 번째 행: 나머지 단계 공통 배치 수량과 3단계 이미지 번역 제한
+        second_row_frame = ttk.Frame(quantity_main_frame)
+        second_row_frame.pack(fill=tk.X, pady=5)
+        
+        # 나머지 단계 공통 배치 수량 (왼쪽)
+        other_quantity_frame = ttk.Frame(second_row_frame)
+        other_quantity_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         ttk.Label(other_quantity_frame, text="나머지 단계 공통 배치 수량:").pack(side=tk.LEFT, padx=(0, 10))
         
@@ -349,7 +386,22 @@ class PercentyAdvancedGUI:
         other_quantity_entry = ttk.Entry(other_quantity_frame, textvariable=self.periodic_other_quantity_var, width=10)
         other_quantity_entry.pack(side=tk.LEFT, padx=(0, 10))
         
-        ttk.Label(other_quantity_frame, text="개 (1단계 외 모든 단계에 적용)", foreground="green").pack(side=tk.LEFT)
+        ttk.Label(other_quantity_frame, text="개 (1단계 외 모든 단계)", foreground="green").pack(side=tk.LEFT)
+        
+        # 3단계 이미지 번역 제한 (오른쪽)
+        translation_limit_frame = ttk.Frame(second_row_frame)
+        translation_limit_frame.pack(side=tk.RIGHT, padx=(20, 0))
+        
+        ttk.Label(translation_limit_frame, text="3단계 이미지 번역 제한:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 이미지 번역 제한 변수 초기화
+        if not hasattr(self, 'periodic_translation_limit_var'):
+            self.periodic_translation_limit_var = tk.StringVar(value="2000")
+        
+        translation_limit_entry = ttk.Entry(translation_limit_frame, textvariable=self.periodic_translation_limit_var, width=10)
+        translation_limit_entry.pack(side=tk.LEFT, padx=(0, 10))
+        
+        ttk.Label(translation_limit_frame, text="개 (이미지 번역 조기 종료)", foreground="orange").pack(side=tk.LEFT)
         
         # 설명 라벨
         # desc_frame = ttk.Frame(quantity_main_frame)
@@ -375,6 +427,15 @@ class PercentyAdvancedGUI:
                 '31': tk.StringVar(value="2"),      # step3_1_core.py 기본값
                 '32': tk.StringVar(value="2"),      # step3_2_core.py 기본값
                 '33': tk.StringVar(value="2"),      # step3_3_core.py 기본값
+                '311': tk.StringVar(value="2"),     # step3_1_1_core.py 기본값
+                '312': tk.StringVar(value="2"),     # step3_1_2_core.py 기본값
+                '313': tk.StringVar(value="2"),     # step3_1_3_core.py 기본값
+                '321': tk.StringVar(value="2"),     # step3_2_1_core.py 기본값
+                '322': tk.StringVar(value="2"),     # step3_2_2_core.py 기본값
+                '323': tk.StringVar(value="2"),     # step3_2_3_core.py 기본값
+                '331': tk.StringVar(value="2"),     # step3_3_1_core.py 기본값
+                '332': tk.StringVar(value="2"),     # step3_3_2_core.py 기본값
+                '333': tk.StringVar(value="2"),     # step3_3_3_core.py 기본값
                 '61': tk.StringVar(value="자동"),     # step6_1_core.py 기본값
                 '62': tk.StringVar(value="자동"),     # step6_2_core.py 기본값
                 '63': tk.StringVar(value="자동"),     # step6_3_core.py 기본값
@@ -393,6 +454,15 @@ class PercentyAdvancedGUI:
             '31': '단계 3-1',
             '32': '단계 3-2',
             '33': '단계 3-3',
+            '311': '단계 311',
+            '312': '단계 312',
+            '313': '단계 313',
+            '321': '단계 321',
+            '322': '단계 322',
+            '323': '단계 323',
+            '331': '단계 331',
+            '332': '단계 332',
+            '333': '단계 333',
             '61': '단계 6-1',
             '62': '단계 6-2',
             '63': '단계 6-3'
@@ -418,7 +488,7 @@ class PercentyAdvancedGUI:
             chunk_entry.pack(side=tk.LEFT, padx=(5, 0))
             
             col += 1
-            if col >= 7:  # 7열로 배치
+            if col >= 8:  # 8열로 배치
                 col = 0
                 row += 1
         
@@ -441,7 +511,7 @@ class PercentyAdvancedGUI:
         # 주기적 실행용 단계 변수들 초기화
         if not hasattr(self, 'periodic_step_vars'):
             self.periodic_step_vars = {}
-            for step in ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']:
+            for step in ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333', '61', '62', '63']:
                 self.periodic_step_vars[step] = tk.BooleanVar()
         
         # 단계 체크박스들을 배치
@@ -453,6 +523,15 @@ class PercentyAdvancedGUI:
             '31': '단계 3-1 (서버1)',
             '32': '단계 3-2 (서버2)',
             '33': '단계 3-3 (서버3)',
+            '311': '단계 311 (서버1-1)',
+            '312': '단계 312 (서버1-2)',
+            '313': '단계 313 (서버1-3)',
+            '321': '단계 321 (서버2-1)',
+            '322': '단계 322 (서버2-2)',
+            '323': '단계 323 (서버2-3)',
+            '331': '단계 331 (서버3-1)',
+            '332': '단계 332 (서버3-2)',
+            '333': '단계 333 (서버3-3)',
             '4': '단계 4',
             '51': '단계 5-1',
             '52': '단계 5-2',
@@ -464,7 +543,9 @@ class PercentyAdvancedGUI:
         
         positions = [
             ('1', 0, 0), ('51', 0, 1), ('52', 0, 2), ('53', 0, 3), ('21', 0, 4), ('22', 0, 5), ('23', 0, 6),
-            ('4', 1, 0), ('31', 1, 1), ('32', 1, 2), ('33', 1, 3), ('61', 1, 4), ('62', 1, 5), ('63', 1, 6)
+            ('4', 1, 0), ('31', 1, 1), ('32', 1, 2), ('33', 1, 3), ('61', 1, 4), ('62', 1, 5), ('63', 1, 6),
+            ('311', 2, 0), ('312', 2, 1), ('313', 2, 2), ('321', 2, 3), ('322', 2, 4), ('323', 2, 5),
+            ('331', 3, 0), ('332', 3, 1), ('333', 3, 2)
         ]
         
         for step, row, col in positions:
@@ -475,7 +556,7 @@ class PercentyAdvancedGUI:
         
         # 단계 선택 버튼들
         step_btn_frame = ttk.Frame(step_frame)
-        step_btn_frame.grid(row=2, column=0, columnspan=7, pady=(10, 0))
+        step_btn_frame.grid(row=4, column=0, columnspan=7, pady=(10, 0))
         
         ttk.Button(step_btn_frame, text="모든 단계 선택", 
                   command=self.select_all_periodic_steps, width=12).pack(side=tk.LEFT, padx=5)
@@ -504,7 +585,7 @@ class PercentyAdvancedGUI:
         periodic_account_list_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         
         # 스크롤 가능한 계정 목록
-        periodic_canvas = tk.Canvas(periodic_account_list_frame, height=80)
+        periodic_canvas = tk.Canvas(periodic_account_list_frame, height=50)
         periodic_scrollbar = ttk.Scrollbar(periodic_account_list_frame, orient="vertical", command=periodic_canvas.yview)
         periodic_scrollable_frame = ttk.Frame(periodic_canvas)
         
@@ -541,7 +622,7 @@ class PercentyAdvancedGUI:
                 cb.grid(row=row, column=col, sticky=tk.W, padx=10, pady=2)
                 
                 col += 1
-                if col >= 3:  # 3열로 배치
+                if col >= 5:  # 3열로 배치
                     col = 0
                     row += 1
                     
@@ -590,14 +671,14 @@ class PercentyAdvancedGUI:
         delay_entry = ttk.Entry(time_frame, textvariable=self.periodic_account_delay_var, width=8)
         delay_entry.pack(side=tk.LEFT, padx=(0, 5))
         
-        ttk.Label(time_frame, text="초").pack(side=tk.LEFT)
+        ttk.Label(time_frame, text="초 // ※ 단계 6-2는 48시간마다 실행됩니다 (다른 단계는 매일 실행)").pack(side=tk.LEFT)
         
         # 단계 6-2 특별 설정
-        step62_frame = ttk.Frame(schedule_frame)
-        step62_frame.pack(fill=tk.X, pady=(10, 5))
+        # step62_frame = ttk.Frame(schedule_frame)
+        # step62_frame.pack(fill=tk.X, pady=(10, 5))
         
-        ttk.Label(step62_frame, text="※ 단계 6-2는 48시간마다 실행됩니다 (다른 단계는 매일 실행)", 
-                 foreground="blue", font=("맑은 고딕", 9)).pack(side=tk.LEFT)
+        # ttk.Label(step62_frame, text="※ 단계 6-2는 48시간마다 실행됩니다 (다른 단계는 매일 실행)", 
+        #         foreground="blue", font=("맑은 고딕", 9)).pack(side=tk.LEFT)
         
         # 주기적 실행 제어 버튼들
         control_frame = ttk.Frame(periodic_frame)
@@ -841,7 +922,9 @@ class PercentyAdvancedGUI:
         
     def get_selected_steps(self):
         """선택된 단계 목록 반환"""
-        step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']
+        step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', 
+                     '311', '312', '313', '321', '322', '323', '331', '332', '333',
+                     '61', '62', '63']
         return [step for step in step_order if step in self.step_vars and self.step_vars[step].get()]
         
     def _add_log(self, message):
@@ -1031,9 +1114,10 @@ class PercentyAdvancedGUI:
                             "--chunk-size", quantity,
                             "--gui"  # GUI 모드 플래그 추가 (프로세스 강제 종료 비활성화)
                         ]
-                    # Step 3 처리 (31, 32, 33을 step3_batch_runner.py로 실행)
-                    elif step in ['31', '32', '33']:
-                        server_num = step[-1]  # 31->1, 32->2, 33->3
+                    # Step 3 처리 (31, 32, 33, 311, 312, 313, 321, 322, 323, 331, 332, 333을 step3_batch_runner.py로 실행)
+                    elif step in ['31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333']:
+                        # 서버 번호를 step 값 그대로 전달 (step3_batch_runner.py의 server_map에서 처리)
+                        server_num = step
                         cmd = [
                             sys.executable,  # python.exe 경로
                             os.path.join(project_root, "step3_batch_runner.py"),
@@ -1042,6 +1126,18 @@ class PercentyAdvancedGUI:
                             "--chunk-size", quantity,
                             "--gui"  # GUI 모드 플래그 추가 (프로세스 강제 종료 비활성화)
                         ]
+                        
+                        # step3_product_limit 매개변수 추가 (주기적 실행 설정에서 가져오기)
+                        if hasattr(self, 'periodic_product_limit_var'):
+                            product_limit = self.periodic_product_limit_var.get().strip()
+                            if product_limit:
+                                cmd.extend(["--step3-product-limit", product_limit])
+                        
+                        # step3_image_limit 매개변수 추가 (기본 설정에서 가져오기)
+                        if hasattr(self, 'step3_image_limit_var'):
+                            image_limit = self.step3_image_limit_var.get().strip()
+                            if image_limit:
+                                cmd.extend(["--step3-image-limit", image_limit])
                     # Step 4 처리 (step4_core.py 사용)
                     elif step == '4':
                         cmd = [
@@ -1064,7 +1160,7 @@ class PercentyAdvancedGUI:
                         ]
                     
                     # 헤드리스 모드 옵션 추가 (Step 2, 3가 아닌 경우에만)
-                    if self.headless_var.get() and step not in ['21', '22', '23', '31', '32', '33', '61', '62', '63']:
+                    if self.headless_var.get() and step not in ['21', '22', '23', '31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333', '61', '62', '63']:
                         cmd.extend(["--headless"])
                     
                     try:
@@ -1414,6 +1510,20 @@ class PercentyAdvancedGUI:
                         else:
                             # 기본값 300초 설정
                             self.periodic_account_delay_var.set("300")
+                        
+                        # 3단계 이중 제한 설정 로드
+                        if 'step3_product_limit' in config:
+                            self.periodic_product_limit_var.set(str(config['step3_product_limit']))
+                        else:
+                            # 기본값 200개 설정
+                            self.periodic_product_limit_var.set("200")
+                        
+                        if 'step3_image_limit' in config:
+                            self.periodic_translation_limit_var.set(str(config['step3_image_limit']))
+                        else:
+                            # 기본값 2000개 설정
+                            self.periodic_translation_limit_var.set("2000")
+                        
                         logger.info("주기적 실행 설정을 로드했습니다.")
             else:
                 logger.info("주기적 실행 설정 파일이 없습니다. 기본값을 사용합니다.")
@@ -1496,7 +1606,7 @@ class PercentyAdvancedGUI:
                 return
             
             # 선택된 단계 확인 (올바른 순서로 정렬)
-            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '61', '62', '63']
+            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333', '61', '62', '63']
             selected_steps = [step for step in step_order if step in self.periodic_step_vars and self.periodic_step_vars[step].get()]
             if not selected_steps:
                 messagebox.showerror("오류", "실행할 단계를 선택해주세요.")
@@ -1518,8 +1628,11 @@ class PercentyAdvancedGUI:
                     # 기본값 사용
                     default_chunks = {
                         '1': 10, '21': 5, '22': 5, '23': 5,
-                        '31': 2, '32': 2, '33': 2, '4': 10,
-                        '51': 10, '52': 10, '53': 10
+                        '31': 2, '32': 2, '33': 2,
+                        '311': 2, '312': 2, '313': 2,
+                        '321': 2, '322': 2, '323': 2,
+                        '331': 2, '332': 2, '333': 2,
+                        '4': 10, '51': 10, '52': 10, '53': 10
                     }
                     chunk_sizes[step_id] = default_chunks.get(step_id, 10)
             
@@ -1534,11 +1647,34 @@ class PercentyAdvancedGUI:
                 messagebox.showerror("오류", "계정 간 대기시간은 0 이상이어야 합니다.")
                 return
             
+            # 3단계 이중 제한 설정 검증
+            step3_product_limit_str = self.periodic_product_limit_var.get().strip()
+            if not step3_product_limit_str.isdigit():
+                messagebox.showerror("오류", "3단계 상품 수량 제한은 숫자만 입력해주세요.")
+                return
+            
+            step3_product_limit = int(step3_product_limit_str)
+            if step3_product_limit <= 0:
+                messagebox.showerror("오류", "3단계 상품 수량 제한은 1 이상이어야 합니다.")
+                return
+            
+            step3_image_limit_str = self.periodic_translation_limit_var.get().strip()
+            if not step3_image_limit_str.isdigit():
+                messagebox.showerror("오류", "3단계 이미지 번역 제한은 숫자만 입력해주세요.")
+                return
+            
+            step3_image_limit = int(step3_image_limit_str)
+            if step3_image_limit <= 0:
+                messagebox.showerror("오류", "3단계 이미지 번역 제한은 1 이상이어야 합니다.")
+                return
+
             # 주기적 실행 설정 구성
             schedule_time = f"{hour:02d}:{minute:02d}"
             config = {
                 'step1_quantity': step1_quantity,  # 1단계 전용 배치 수량
                 'other_quantity': other_quantity,  # 나머지 단계 공통 배치 수량
+                'step3_product_limit': step3_product_limit,  # 3단계 상품 수량 제한
+                'step3_image_limit': step3_image_limit,  # 3단계 이미지 번역 제한
                 'selected_steps': selected_steps,
                 'selected_accounts': selected_accounts,
                 'schedule_time': schedule_time,
@@ -1627,7 +1763,7 @@ class PercentyAdvancedGUI:
                 return
             
             # 선택된 단계 확인 (올바른 순서로 정렬)
-            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '6']
+            step_order = ['1', '51', '52', '53', '21', '22', '23', '4', '31', '32', '33', '311', '312', '313', '321', '322', '323', '331', '332', '333', '61', '62', '63']
             selected_steps = [step for step in step_order if step in self.periodic_step_vars and self.periodic_step_vars[step].get()]
             if not selected_steps:
                 messagebox.showerror("오류", "실행할 단계를 선택해주세요.")
@@ -1650,10 +1786,33 @@ class PercentyAdvancedGUI:
                 messagebox.showerror("오류", "계정 간 대기시간은 0 이상이어야 합니다.")
                 return
             
+            # 3단계 이중 제한 설정 검증
+            step3_product_limit_str = self.periodic_product_limit_var.get().strip()
+            if not step3_product_limit_str.isdigit():
+                messagebox.showerror("오류", "3단계 상품 수량 제한은 숫자만 입력해주세요.")
+                return
+            
+            step3_product_limit = int(step3_product_limit_str)
+            if step3_product_limit <= 0:
+                messagebox.showerror("오류", "3단계 상품 수량 제한은 1 이상이어야 합니다.")
+                return
+            
+            step3_image_limit_str = self.periodic_translation_limit_var.get().strip()
+            if not step3_image_limit_str.isdigit():
+                messagebox.showerror("오류", "3단계 이미지 번역 제한은 숫자만 입력해주세요.")
+                return
+            
+            step3_image_limit = int(step3_image_limit_str)
+            if step3_image_limit <= 0:
+                messagebox.showerror("오류", "3단계 이미지 번역 제한은 1 이상이어야 합니다.")
+                return
+            
             # 테스트 실행 (여기서는 메시지만 표시)
             message = f"테스트 실행이 시작됩니다.\n\n"
             message += f"1단계 배치 수량: {step1_quantity}개\n"
             message += f"나머지 단계 배치 수량: {other_quantity}개\n"
+            message += f"3단계 상품 수량 제한: {step3_product_limit}개\n"
+            message += f"3단계 이미지 번역 제한: {step3_image_limit}개\n"
             message += f"선택된 단계: {', '.join(selected_steps)}\n"
             message += f"선택된 계정: {len(selected_accounts)}개\n"
             message += f"계정 간 대기시간: {account_delay}초"

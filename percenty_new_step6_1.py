@@ -23,12 +23,6 @@ from percenty_utils import hide_channel_talk_and_modals, periodic_ui_cleanup, en
 # 새 탭에서의 로그인 모달창 숨기기 필요할 경우에만 사용
 from login_modal_utils import apply_login_modal_hiding_for_new_tab
 
-# 공통 함수 임포트
-from core.common.modal_handler import handle_post_login_modals, hide_channel_talk, close_modal_dialogs
-from core.common.navigation_handler import navigate_to_ai_sourcing, navigate_to_group_management, switch_to_non_group_view
-from core.common.product_handler import check_product_count, check_toggle_state, toggle_product_view
-from core.common.ui_handler import periodic_ui_cleanup as common_periodic_ui_cleanup, ensure_clean_ui_before_action as common_ensure_clean_ui_before_action
-
 # 드롭다운 유틸리티 임포트
 from dropdown_utils import get_dropdown_manager
 

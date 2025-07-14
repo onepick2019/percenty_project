@@ -78,7 +78,7 @@ class MarketManagerCafe24:
                 return False
             
             # 9. 로그아웃
-            if not self._logout_cafe24():
+            if not self._logout():
                 logger.warning("로그아웃에 실패했지만 계속 진행합니다")
             
             # 9. 카페24 탭 닫기 (현재 탭만 닫고 메인 탭으로 복귀는 호출하는 쪽에서 처리)
@@ -97,8 +97,7 @@ class MarketManagerCafe24:
     
     def _open_cafe24_login_page(self):
         """
-        카페24 로그인 페이지를 새 탭에서 엽니다.
-        로그인 화면이 아닌 경우 로그아웃을 먼저 수행합니다.
+        새 탭에서 카페24 로그인 페이지를 엽니다.
         
         Returns:
             bool: 성공 여부
@@ -118,18 +117,6 @@ class MarketManagerCafe24:
             # 페이지 로드 대기
             time.sleep(3)
             
-            # 로그인 화면인지 확인 (아이디/비밀번호 입력창 존재 여부)
-            if not self._is_login_page():
-                logger.info("로그인 화면이 아님. 로그아웃 후 재시도")
-                # 로그아웃 수행
-                if self._logout_cafe24():
-                    # 로그아웃 후 다시 로그인 페이지로 이동
-                    self.driver.get("https://eclogin.cafe24.com/Shop/?mode=mp")
-                    time.sleep(3)
-                else:
-                    logger.error("로그아웃 실패")
-                    return False
-            
             logger.info("카페24 로그인 페이지 열기 완료")
             return True
             
@@ -139,7 +126,8 @@ class MarketManagerCafe24:
     
     def _perform_login(self, cafe24_id, cafe24_password):
         """
-        카페24 로그인을 수행합니다. 최대 3회 재시도합니다.
+        카페24 로그인을 수행합니다.
+        로그인 페이지 상태를 확인하고 필요시 로그아웃을 먼저 수행합니다.
         
         Args:
             cafe24_id (str): 카페24 아이디
@@ -148,47 +136,39 @@ class MarketManagerCafe24:
         Returns:
             bool: 성공 여부
         """
-        for attempt in range(3):
-            try:
-                logger.info(f"카페24 로그인 시도 (시도 {attempt + 1}/3): {cafe24_id}")
-                
-                # 아이디 입력
-                id_input = self.wait.until(
-                    EC.presence_of_element_located((By.ID, "mall_id"))
-                )
-                id_input.clear()
-                id_input.send_keys(cafe24_id)
-                
-                # 비밀번호 입력
-                password_input = self.driver.find_element(By.ID, "userpasswd")
-                password_input.clear()
-                password_input.send_keys(cafe24_password)
-                
-                # 로그인 버튼 클릭
-                login_button = self.driver.find_element(By.CSS_SELECTOR, "button.btnStrong.large")
-                login_button.click()
-                
-                # 로그인 처리 대기
-                time.sleep(5)
-                
-                # 로그인 성공 여부 확인
-                if self._check_login_success():
-                    logger.info(f"카페24 로그인 성공 (시도 {attempt + 1}/3)")
-                    return True
-                else:
-                    logger.warning(f"로그인 실패 (시도 {attempt + 1}/3)")
-                    if attempt < 2:  # 마지막 시도가 아닌 경우
-                        time.sleep(2)
-                        continue
-                
-            except Exception as e:
-                logger.error(f"카페24 로그인 수행 실패 (시도 {attempt + 1}/3): {e}")
-                if attempt < 2:  # 마지막 시도가 아닌 경우
-                    time.sleep(2)
-                    continue
-        
-        logger.error("카페24 로그인 3회 시도 모두 실패")
-        return False
+        try:
+            logger.info(f"카페24 로그인 시도: {cafe24_id}")
+            
+            # 로그인 페이지 상태 확인 및 필요시 로그아웃 수행
+            if not self._check_and_prepare_login_page():
+                logger.error("로그인 페이지 준비 실패")
+                return False
+            
+            # 아이디 입력
+            id_input = self.wait.until(
+                EC.presence_of_element_located((By.ID, "mall_id"))
+            )
+            id_input.clear()
+            id_input.send_keys(cafe24_id)
+            
+            # 비밀번호 입력
+            password_input = self.driver.find_element(By.ID, "userpasswd")
+            password_input.clear()
+            password_input.send_keys(cafe24_password)
+            
+            # 로그인 버튼 클릭
+            login_button = self.driver.find_element(By.CSS_SELECTOR, "button.btnStrong.large")
+            login_button.click()
+            
+            # 로그인 처리 대기
+            time.sleep(3)
+            
+            logger.info("카페24 로그인 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"카페24 로그인 실패: {e}")
+            return False
     
     def _handle_post_login(self):
         """
@@ -210,8 +190,21 @@ class MarketManagerCafe24:
             except NoSuchElementException:
                 logger.info("비밀번호 변경 화면 없음")
             
-            # 로그인 성공 확인
-            return self._check_login_success()
+            # 로그인 성공 확인 (메인 페이지 URL 확인)
+            current_url = self.driver.current_url
+            if "mp.cafe24.com/mp/main/front/service" in current_url:
+                logger.info("카페24 메인 페이지 로그인 확인 완료")
+                return True
+            else:
+                # URL이 다른 경우 잠시 대기 후 재확인
+                time.sleep(3)
+                current_url = self.driver.current_url
+                if "mp.cafe24.com" in current_url:
+                    logger.info("카페24 로그인 확인 완료")
+                    return True
+                else:
+                    logger.error(f"로그인 실패 - 현재 URL: {current_url}")
+                    return False
             
         except Exception as e:
             logger.error(f"로그인 후 처리 실패: {e}")
@@ -233,14 +226,8 @@ class MarketManagerCafe24:
             # 페이지 로드 대기
             time.sleep(3)
             
-            # URL 확인
-            current_url = self.driver.current_url
-            if "mp.cafe24.com/mp/product/front/import" in current_url:
-                logger.info(f"마켓상품가져오기 페이지 이동 완료: {current_url}")
-                return True
-            else:
-                logger.error(f"마켓상품가져오기 페이지 이동 실패 - 현재 URL: {current_url}")
-                return False
+            logger.info("마켓상품가져오기 페이지 이동 완료")
+            return True
             
         except Exception as e:
             logger.error(f"마켓상품가져오기 페이지 이동 실패: {e}")
@@ -403,7 +390,7 @@ class MarketManagerCafe24:
     
     def _confirm_import_modal(self):
         """
-        가져오기 모달창에서 확인을 클릭하고 성공 여부를 URL 변화로 확인합니다.
+        가져오기 모달창에서 확인을 클릭합니다.
         
         Returns:
             bool: 성공 여부
@@ -414,58 +401,29 @@ class MarketManagerCafe24:
             # 모달창 대기
             time.sleep(2)
             
-            # 클릭 전 현재 URL 확인
-            before_url = self.driver.current_url
-            logger.info(f"클릭 전 URL: {before_url}")
-            
             # pyautogui를 사용하여 확인 버튼 클릭 (좌표 기반)
-            logger.info("pyautogui.click(1060, 205) 실행")
             pyautogui.click(1060, 205)
-            logger.info("pyautogui.click 실행 완료")
             
             # 모달창 처리 대기
             time.sleep(5)
             
-            # Alert 존재 여부 확인
-            try:
-                alert = self.driver.switch_to.alert
-                alert_text = alert.text
-                logger.warning(f"클릭 후에도 Alert가 존재함: {alert_text}")
-                # Alert를 수락하여 처리
-                alert.accept()
-                logger.info("Alert 수락 처리 완료")
-                time.sleep(3)
-            except Exception:
-                logger.info("Alert가 존재하지 않음 - 정상적으로 처리됨")
-            
-            # 클릭 후 URL 확인 (11번가 가져오기 성공 시 #none이 추가됨)
-            after_url = self.driver.current_url
-            logger.info(f"클릭 후 URL: {after_url}")
-            
-            # URL 변화 확인
-            if "#none" in after_url or after_url != before_url:
-                logger.info("가져오기 성공 - URL 변화 확인됨")
-                return True
-            else:
-                logger.warning("가져오기 실패 - URL 변화 없음")
-                return False
+            logger.info("가져오기 모달창 확인 완료")
+            return True
             
         except Exception as e:
             logger.error(f"가져오기 모달창 확인 실패: {e}")
             return False
     
-
-    
-    def _logout_cafe24(self):
+    def _logout(self):
         """
-        카페24에서 로그아웃합니다. 최대 3회 재시도합니다.
+        카페24에서 로그아웃합니다. 로그아웃 성공 여부를 확인하며, 실패 시 최대 2회 재시도합니다.
         
         Returns:
             bool: 성공 여부
         """
-        for attempt in range(3):
+        for attempt in range(2):  # 최대 2회 시도
             try:
-                logger.info(f"카페24 로그아웃 (시도 {attempt + 1}/3)")
+                logger.info(f"카페24 로그아웃 (시도 {attempt + 1}/2)")
                 
                 # 내정보 버튼 클릭
                 my_info_button = self.wait.until(
@@ -483,76 +441,28 @@ class MarketManagerCafe24:
                 logout_button.click()
                 
                 # 로그아웃 처리 대기
-                time.sleep(5)
+                time.sleep(3)
                 
                 # 로그아웃 성공 여부 확인
                 if self._check_logout_success():
-                    logger.info(f"카페24 로그아웃 성공 (시도 {attempt + 1}/3)")
+                    logger.info(f"카페24 로그아웃 성공 (시도 {attempt + 1}/2)")
                     return True
                 else:
-                    logger.warning(f"로그아웃 실패 (시도 {attempt + 1}/3)")
-                    if attempt < 2:  # 마지막 시도가 아닌 경우
+                    logger.warning(f"로그아웃 후 상태 확인 실패 (시도 {attempt + 1}/2)")
+                    if attempt < 1:  # 마지막 시도가 아닌 경우
+                        logger.info("로그아웃 재시도 준비 중...")
                         time.sleep(2)
                         continue
                 
             except Exception as e:
-                logger.error(f"카페24 로그아웃 실패 (시도 {attempt + 1}/3): {e}")
-                if attempt < 2:  # 마지막 시도가 아닌 경우
+                logger.error(f"카페24 로그아웃 실패 (시도 {attempt + 1}/2): {e}")
+                if attempt < 1:  # 마지막 시도가 아닌 경우
+                    logger.info("로그아웃 재시도 준비 중...")
                     time.sleep(2)
                     continue
         
-        logger.error("카페24 로그아웃 3회 시도 모두 실패")
+        logger.error("카페24 로그아웃 2회 시도 모두 실패")
         return False
-    
-    def _is_login_page(self):
-        """
-        현재 페이지가 로그인 페이지인지 확인합니다.
-        
-        Returns:
-            bool: 로그인 페이지 여부
-        """
-        try:
-            # 아이디 입력창과 비밀번호 입력창이 있는지 확인
-            self.driver.find_element(By.ID, "mall_id")
-            self.driver.find_element(By.ID, "userpasswd")
-            return True
-        except NoSuchElementException:
-            return False
-    
-    def _check_login_success(self):
-        """
-        로그인 성공 여부를 확인합니다.
-        
-        Returns:
-            bool: 로그인 성공 여부
-        """
-        try:
-            # 로그인 성공 확인을 위해 잠시 대기
-            time.sleep(5)
-            
-            # 현재 URL 확인
-            current_url = self.driver.current_url
-            logger.info(f"로그인 후 현재 URL: {current_url}")
-            
-            # 로그인 성공 여부 확인
-            if "mp.cafe24.com/mp/main/front/service" in current_url or "mp.cafe24.com" in current_url:
-                logger.info("로그인 성공 확인")
-                return True
-            else:
-                # 추가 대기 후 재확인
-                time.sleep(5)
-                current_url = self.driver.current_url
-                logger.info(f"재확인 후 현재 URL: {current_url}")
-                
-                if "mp.cafe24.com/mp/main/front/service" in current_url or "mp.cafe24.com" in current_url:
-                    logger.info("로그인 성공 확인 (재확인)")
-                    return True
-                else:
-                    logger.error(f"로그인 실패 - 현재 URL: {current_url}")
-                    return False
-        except Exception as e:
-            logger.error(f"로그인 성공 확인 실패: {e}")
-            return False
     
     def _check_logout_success(self):
         """
@@ -563,13 +473,113 @@ class MarketManagerCafe24:
         """
         try:
             current_url = self.driver.current_url
+            logger.info(f"로그아웃 후 현재 URL: {current_url}")
+            
             # 로그인 페이지로 리다이렉트되었는지 확인
             if "eclogin.cafe24.com" in current_url or "login" in current_url.lower():
-                logger.info("로그아웃 성공 확인")
+                logger.info("로그아웃 성공 확인 - 로그인 페이지로 이동됨")
                 return True
             else:
-                logger.warning(f"로그아웃 실패 - 현재 URL: {current_url}")
+                logger.warning(f"로그아웃 실패 - 여전히 로그인 상태: {current_url}")
                 return False
+                
         except Exception as e:
             logger.error(f"로그아웃 성공 확인 실패: {e}")
+            return False
+    
+    def _check_and_prepare_login_page(self):
+        """
+        로그인 페이지 상태를 확인하고 필요시 로그아웃을 수행합니다.
+        
+        Returns:
+            bool: 로그인 페이지 준비 성공 여부
+        """
+        try:
+            logger.info("로그인 페이지 상태 확인")
+            
+            # 현재 페이지에서 로그인 입력창 존재 여부 확인
+            try:
+                # 아이디 입력창 확인 (3초 대기)
+                id_input = WebDriverWait(self.driver, 3).until(
+                    EC.presence_of_element_located((By.ID, "mall_id"))
+                )
+                
+                # 비밀번호 입력창 확인
+                password_input = self.driver.find_element(By.ID, "userpasswd")
+                
+                # 로그인 버튼 확인
+                login_button = self.driver.find_element(By.CSS_SELECTOR, "button.btnStrong.large")
+                
+                # 모든 요소가 표시되는지 확인
+                if (id_input.is_displayed() and password_input.is_displayed() and 
+                    login_button.is_displayed()):
+                    logger.info("정상적인 로그인 페이지 확인 - 로그인 진행")
+                    return True
+                else:
+                    logger.warning("로그인 요소들이 표시되지 않음 - 로그아웃 후 재시도")
+                    return self._force_logout_and_retry()
+                    
+            except (TimeoutException, NoSuchElementException):
+                logger.warning("로그인 입력창을 찾을 수 없음 - 이미 로그인된 상태일 가능성")
+                return self._force_logout_and_retry()
+                
+        except Exception as e:
+            logger.error(f"로그인 페이지 상태 확인 실패: {e}")
+            return False
+    
+    def _force_logout_and_retry(self):
+        """
+        강제 로그아웃을 수행하고 로그인 페이지로 이동합니다.
+        
+        Returns:
+            bool: 성공 여부
+        """
+        try:
+            logger.info("강제 로그아웃 및 로그인 페이지 재로드 시도")
+            
+            # 현재 URL 확인
+            current_url = self.driver.current_url
+            logger.info(f"현재 URL: {current_url}")
+            
+            # 이미 로그인된 상태인지 확인 (카페24 관리자 페이지에 있는 경우)
+            if "mp.cafe24.com" in current_url:
+                logger.info("카페24 관리자 페이지에서 로그아웃 시도")
+                if self._logout():
+                    logger.info("로그아웃 성공 - 로그인 페이지로 이동")
+                    # 로그인 페이지로 직접 이동
+                    self.driver.get("https://eclogin.cafe24.com/Shop/?mode=mp")
+                    time.sleep(3)
+                else:
+                    logger.warning("로그아웃 실패 - 로그인 페이지로 강제 이동")
+                    # 로그아웃 실패 시에도 로그인 페이지로 강제 이동
+                    self.driver.get("https://eclogin.cafe24.com/Shop/?mode=mp")
+                    time.sleep(3)
+            else:
+                logger.info("로그인 페이지로 직접 이동")
+                # 로그인 페이지로 이동
+                self.driver.get("https://eclogin.cafe24.com/Shop/?mode=mp")
+                time.sleep(3)
+            
+            # 로그인 페이지 요소 재확인
+            try:
+                id_input = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.ID, "mall_id"))
+                )
+                password_input = self.driver.find_element(By.ID, "userpasswd")
+                login_button = self.driver.find_element(By.CSS_SELECTOR, "button.btnStrong.large")
+                
+                if (id_input.is_displayed() and password_input.is_displayed() and 
+                    login_button.is_displayed()):
+                    logger.info("로그인 페이지 준비 완료")
+                    return True
+                else:
+                    logger.error("로그인 페이지 요소들이 여전히 표시되지 않음")
+                    return False
+                    
+            except (TimeoutException, NoSuchElementException) as e:
+                logger.error(f"로그인 페이지 요소 재확인 실패: {e}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"강제 로그아웃 및 재시도 실패: {e}")
             return False

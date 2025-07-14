@@ -71,6 +71,10 @@ RETRY_DELAY = EXTERNAL["RETRY_DELAY"]  # 재시도 전 대기 시간
 class PercentyLogin:
     """퍼센티 로그인 클래스 (창 모드)"""
     
+    # 클래스 변수로 화면 해상도 캐시
+    _screen_width = None
+    _screen_height = None
+    
     def __init__(self, driver=None, account=None, window_width=None, window_height=None, window_x=None, window_y=None):
         """
         초기화
@@ -92,36 +96,43 @@ class PercentyLogin:
         self.driver = driver
         logging.info("기본 속성 설정 완료")
         
-        # 화면 해상도 확인 (안전한 방법 사용)
-        logging.info("화면 해상도 확인 시작")
-        try:
-            logging.info("tkinter import 시작")
-            import tkinter as tk
-            logging.info("tkinter import 완료")
-            
-            logging.info("tkinter root 생성 시작")
-            root = tk.Tk()
-            logging.info("tkinter root 생성 완료")
-            
-            logging.info("tkinter root withdraw 시작")
-            root.withdraw()  # 창을 숨김
-            logging.info("tkinter root withdraw 완료")
-            
-            logging.info("화면 크기 측정 시작")
-            screen_width = root.winfo_screenwidth()
-            screen_height = root.winfo_screenheight()
-            logging.info(f"화면 크기 측정 완료: {screen_width}x{screen_height}")
-            
-            logging.info("tkinter root destroy 시작")
-            root.destroy()
-            logging.info("tkinter root destroy 완료")
-            
-            logging.info(f"tkinter로 화면 해상도 확인 성공: {screen_width}x{screen_height}")
-        except Exception as e:
-            logging.warning(f"tkinter 화면 해상도 확인 실패, 기본값 사용: {e}")
-            # 기본값 사용
-            screen_width = 1920
-            screen_height = 1080
+        # 화면 해상도 확인 (클래스 변수 캐싱 사용)
+        if PercentyLogin._screen_width is None or PercentyLogin._screen_height is None:
+            logging.info("화면 해상도 최초 확인 시작")
+            try:
+                logging.info("tkinter import 시작")
+                import tkinter as tk
+                logging.info("tkinter import 완료")
+                
+                logging.info("tkinter root 생성 시작")
+                root = tk.Tk()
+                logging.info("tkinter root 생성 완료")
+                
+                logging.info("tkinter root withdraw 시작")
+                root.withdraw()  # 창을 숨김
+                logging.info("tkinter root withdraw 완료")
+                
+                logging.info("화면 크기 측정 시작")
+                PercentyLogin._screen_width = root.winfo_screenwidth()
+                PercentyLogin._screen_height = root.winfo_screenheight()
+                logging.info(f"화면 크기 측정 완료: {PercentyLogin._screen_width}x{PercentyLogin._screen_height}")
+                
+                logging.info("tkinter root destroy 시작")
+                root.destroy()
+                logging.info("tkinter root destroy 완료")
+                
+                logging.info(f"tkinter로 화면 해상도 확인 성공: {PercentyLogin._screen_width}x{PercentyLogin._screen_height}")
+            except Exception as e:
+                logging.warning(f"tkinter 화면 해상도 확인 실패, 기본값 사용: {e}")
+                # 기본값 사용
+                PercentyLogin._screen_width = 1920
+                PercentyLogin._screen_height = 1080
+        else:
+            logging.info(f"캐시된 화면 해상도 사용: {PercentyLogin._screen_width}x{PercentyLogin._screen_height}")
+        
+        # 로컬 변수에 할당
+        screen_width = PercentyLogin._screen_width
+        screen_height = PercentyLogin._screen_height
         
         # 기본 창 크기 및 위치 설정 (전체 화면 너비 사용)
         logging.info("창 크기 및 위치 설정 시작")

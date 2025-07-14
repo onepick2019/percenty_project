@@ -197,13 +197,25 @@ class BatchCLI:
             
             start_time = time.time()
             
+            # 3단계 제한 설정 준비
+            step3_limits = {}
+            if hasattr(args, 'step3_product_limit'):
+                step3_limits['step3_product_limit'] = args.step3_product_limit
+            if hasattr(args, 'step3_image_limit'):
+                step3_limits['step3_image_limit'] = args.step3_image_limit
+            
+            # 진행 상황 초기화 옵션 추가
+            reset_progress = getattr(args, 'reset_progress', True)
+            
             result = self.batch_manager.run_single_step(
                 step=args.step,
                 accounts=real_accounts,  # 실제 이메일 주소 사용
                 quantity=args.quantity,
                 concurrent=args.concurrent,
                 interval=args.interval,
-                chunk_size=args.chunk_size
+                chunk_size=args.chunk_size,
+                reset_progress=reset_progress,
+                **step3_limits
             )
             
             end_time = time.time()
@@ -479,12 +491,16 @@ class BatchCLI:
     def _execute_single_batch(self, real_account: str, args, batch_index: int, all_results: list, converted_account: str = None):
         """일반 단계의 단일 배치 실행"""
         try:
+            # 진행 상황 초기화 옵션 (첫 번째 배치에서만 적용)
+            reset_progress = getattr(args, 'reset_progress', True) and batch_index == 1
+            
             result = self.batch_manager.run_single_step(
                 step=args.step,
                 accounts=[real_account],
                 quantity=args.quantity,
                 concurrent=False,  # 다중 배치에서는 개별적으로 실행
-                interval=0
+                interval=0,
+                reset_progress=reset_progress
             )
             
             # 결과에 통합 로그 정보 추가
@@ -833,8 +849,8 @@ def create_parser():
     
     # 단일 단계 실행
     single_parser = subparsers.add_parser('single', help='단일 단계 배치 실행')
-    single_parser.add_argument('--step', type=int, required=True, choices=[1, 2, 3, 4, 5, 6, 21, 22, 23, 31, 32, 33, 51, 52, 53, 61, 62, 63],
-                              help='실행할 단계 번호 (Step 2 하위: 21=2_1, 22=2_2, 23=2_3, Step 3 하위: 31=3_1, 32=3_2, 33=3_3, Step 5 하위: 51=5_1, 52=5_2, 53=5_3, Step 6 하위: 61=6_1, 62=6_2, 63=6_3)')
+    single_parser.add_argument('--step', type=int, required=True, choices=[1, 2, 3, 4, 5, 6, 21, 22, 23, 31, 32, 33, 51, 52, 53, 61, 62, 63, 311, 312, 313, 321, 322, 323, 331, 332, 333],
+                              help='실행할 단계 번호 (Step 2 하위: 21=2_1, 22=2_2, 23=2_3, Step 3 하위: 31=3_1, 32=3_2, 33=3_3, Step 3 세분화: 311=3_1_1, 312=3_1_2, 313=3_1_3, 321=3_2_1, 322=3_2_2, 323=3_2_3, 331=3_3_1, 332=3_3_2, 333=3_3_3, Step 5 하위: 51=5_1, 52=5_2, 53=5_3, Step 6 하위: 61=6_1, 62=6_2, 63=6_3)')
     single_parser.add_argument('--accounts', nargs='+', required=True,
                               help='계정 ID 목록')
     single_parser.add_argument('--quantity', type=int, default=100,
@@ -847,6 +863,14 @@ def create_parser():
                               help='계정 간 실행 간격(초) (기본값: 5)')
     single_parser.add_argument('--chunk-size', type=int, default=20,
                               help='청크 크기 (기본값: 20, 4단계에서는 무시됨)')
+    single_parser.add_argument('--step3-product-limit', type=int, default=200,
+                              help='3단계 상품 수량 제한 (기본값: 200)')
+    single_parser.add_argument('--step3-image-limit', type=int, default=2000,
+                              help='3단계 이미지 번역 수량 제한 (기본값: 2000)')
+    single_parser.add_argument('--reset-progress', action='store_true', default=True,
+                              help='3단계 진행 상황 파일 초기화 (기본값: True, 새로운 배치 작업 시작 시 사용)')
+    single_parser.add_argument('--no-reset-progress', action='store_false', dest='reset_progress',
+                              help='3단계 진행 상황 파일 초기화 비활성화')
     
     # 다중 단계 실행
     multi_parser = subparsers.add_parser('multi', help='다중 단계 배치 실행')
@@ -875,6 +899,10 @@ def create_parser():
                                     help='배치 간 실행 간격(초) (기본값: 5)')
     multi_batch_parser.add_argument('-o', '--output',
                                     help='결과 저장 파일 경로')
+    multi_batch_parser.add_argument('--reset-progress', action='store_true', default=True,
+                                    help='3단계 진행 상황 파일 초기화 (기본값: True, 새로운 배치 작업 시작 시 사용)')
+    multi_batch_parser.add_argument('--no-reset-progress', action='store_false', dest='reset_progress',
+                                    help='3단계 진행 상황 파일 초기화 비활성화')
     
     # 시나리오 실행
     scenario_parser = subparsers.add_parser('scenario', help='사전 정의된 시나리오 실행')

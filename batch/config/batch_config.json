@@ -113,5 +113,14 @@
     "disk_space_check": true,
     "min_free_space_gb": 1,
     "cleanup_temp_files": true
+  },
+  "telegram": {
+    "enabled": true,
+    "bot_token": "7934942462:AAH8oII3Rg9HP4Wh4Hzkk5L3aeu4cXL4pVE",
+    "chat_id": "7918845682",
+    "notify_start": true,
+    "notify_complete": true,
+    "notify_error": true,
+    "notify_warning": true
   }
 }

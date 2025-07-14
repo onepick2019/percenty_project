@@ -8,6 +8,7 @@ import time
 import logging
 import pandas as pd
 import os
+import random
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -39,6 +40,7 @@ from dropdown_utils import PercentyDropdown  # 안정된 dropdown_utils 사용
 from click_utils import smart_click, hybrid_click
 from keyboard_shortcuts import KeyboardShortcuts
 from image_utils3 import PercentyImageManager3  # 안정된 image_utils 사용
+from core.common.batch_limit_manager import BatchLimitManager
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
@@ -67,22 +69,37 @@ class ProductEditorCore3:
         'O': 'PRODUCT_TAB_OPTION'       # O열: 옵션 이미지 번역 -> 옵션 탭
     }
     
-    def __init__(self, driver, config=None):
+    def __init__(self, driver, config=None, step3_product_limit=20, step3_image_limit=2000):
         """
         상품 편집 코어 3단계 초기화
         
         Args:
-            driver: Selenium WebDriver 인스턴스
+            driver: Selenium WebDriver 인스턴스 (None 허용)
             config: 설정 정보 딕셔너리 (선택사항)
+            step3_product_limit: 3단계 상품 수량 제한 (기본값: 20)
+            step3_image_limit: 3단계 이미지 번역 수량 제한 (기본값: 2000)
         """
         self.driver = driver
         self.config = config or {}
-        # 멀티브라우저 간섭 방지를 위해 use_selenium=True 강제 설정
-        self.keyboard = KeyboardShortcuts(self.driver, use_selenium=True)
-        self.image_manager = PercentyImageManager3(self.driver)
-        self.image_translation_handler = ImageTranslationManager(self.driver)
+        self.step3_product_limit = step3_product_limit
+        self.step3_image_limit = step3_image_limit
         
-        logger.info("ProductEditorCore3 초기화 완료")
+        # 이미지 번역 수 추적 변수
+        self.total_translated_images = 0
+        self.current_product_translated_images = 0
+        
+        # driver가 None이 아닐 때만 드라이버 의존 객체들 초기화
+        if self.driver is not None:
+            # 멀티브라우저 간섭 방지를 위해 use_selenium=True 강제 설정
+            self.keyboard = KeyboardShortcuts(self.driver, use_selenium=True)
+            self.image_manager = PercentyImageManager3(self.driver)
+            self.image_translation_handler = ImageTranslationManager(self.driver)
+        else:
+            self.keyboard = None
+            self.image_manager = None
+            self.image_translation_handler = None
+        
+        logger.info(f"ProductEditorCore3 초기화 완료 (driver: {'있음' if driver else '없음'}, 상품제한: {step3_product_limit}, 이미지번역제한: {step3_image_limit})")
     
     def select_product_name_input(self):
         """
@@ -182,7 +199,7 @@ class ProductEditorCore3:
         
         return result
     
-    def load_task_list_from_excel_with_server_filter(self, account_id, step="step3", server_name=None, excel_path="percenty_id.xlsx"):
+    def load_task_list_from_excel_with_server_filter(self, account_id, step="step3", server_name=None, excel_path="percenty_id.xlsx", completed_keywords=None):
         """
         엑셀 파일에서 계정별 step3 작업 목록 로드 (서버 필터링 포함)
         
@@ -191,6 +208,7 @@ class ProductEditorCore3:
             step: 작업 단계 (step3 고정)
             server_name: 서버명 (서버1, 서버2, 서버3)
             excel_path: 엑셀 파일 경로
+            completed_keywords: 이미 완료된 키워드 목록 (제외할 키워드들)
             
         Returns:
             list: 작업 목록 (provider_code, target_group, H~L열 데이터 포함)
@@ -312,6 +330,19 @@ class ProductEditorCore3:
                         'o_data': str(o_data) if pd.notna(o_data) else None
                     }
                     task_list.append(task)
+            
+            # 이미 완료된 키워드 제외
+            if completed_keywords:
+                original_count = len(task_list)
+                task_list = [task for task in task_list if task['provider_code'] not in completed_keywords]
+                excluded_count = original_count - len(task_list)
+                if excluded_count > 0:
+                    logger.info(f"이미 완료된 키워드 {excluded_count}개 제외됨: {completed_keywords}")
+            
+            # 키워드 순서를 랜덤하게 섞기
+            if task_list:
+                random.shuffle(task_list)
+                logger.info(f"키워드 순서를 랜덤하게 섞었습니다.")
                 
             logger.info(f"{len(task_list)}개의 {step} 작업을 로드했습니다.")
             return task_list
@@ -326,12 +357,16 @@ class ProductEditorCore3:
         
         Args:
             keyword: 검색할 키워드 (provider_code)
-            max_products: 최대 상품 수 제한 (기본값: 20)
+            max_products: 최대 상품 수 제한 (기본값: 20, None이면 제한 없음)
             
         Returns:
             int: 검색된 상품 수
         """
         try:
+            # max_products가 None인 경우 기본값 설정
+            if max_products is None:
+                max_products = self.step3_product_limit or 20
+            
             logger.info(f"키워드 '{keyword}'로 상품 검색 시작 (최대 {max_products}개 제한)")
             
             # 드라이버 연결 상태 검증
@@ -386,8 +421,8 @@ class ProductEditorCore3:
             product_count = self._get_search_result_count()
             logger.info(f"키워드 '{keyword}' 검색 결과: {product_count}개 상품")
             
-            # 상품 수 제한 처리 (20개 이상인 경우에만)
-            if product_count > max_products:
+            # 상품 수 제한 처리 (max_products가 설정되고 검색 결과가 초과하는 경우에만)
+            if max_products and product_count > max_products:
                 logger.info(f"검색 결과가 {max_products}개를 초과합니다. 상품 수를 제한합니다.")
                 limited_count = self._limit_search_results(max_products)
                 logger.info(f"상품 수 제한 완료: {limited_count}개로 제한됨")
@@ -488,9 +523,9 @@ class ProductEditorCore3:
             except Exception as e:
                 logger.warning(f"페이지 크기 조정 실패: {e}")
             
-            # 페이지 크기 조정이 불가능한 경우, 실제 상품 수 반환 (블라인드 처리 제거)
-            logger.info(f"페이지 크기 조정이 불가능하므로 실제 검색된 상품 수({current_count})를 반환합니다.")
-            return current_count
+            # 페이지 크기 조정이 불가능한 경우, 제한된 상품 수 반환
+            logger.info(f"페이지 크기 조정이 불가능하므로 제한된 상품 수({max_products})를 반환합니다.")
+            return max_products  # 실제 제한값 반환
             
         except Exception as e:
              logger.error(f"상품 수 제한 중 오류: {e}")
@@ -1850,7 +1885,7 @@ class ProductEditorCore3:
     
     def _execute_combined_translate_actions(self, actions):
         """
-        복합 이미지 번역 액션들을 통합 처리 (모달창 한 번만 열기)
+        복합 이미지 번역 액션들을 순차 처리 (각 액션을 개별적으로 실행)
         
         Args:
             actions: 파싱된 액션 정보 리스트
@@ -1859,49 +1894,62 @@ class ProductEditorCore3:
             bool: 성공 여부
         """
         try:
-            # 모든 액션의 위치들을 하나로 통합
-            combined_positions = []
+            success_count = 0
+            total_actions = len(actions)
             
             for i, action_info in enumerate(actions):
-                logger.info(f"복합 액션 {i+1}/{len(actions)} 실행: {action_info}")
+                logger.info(f"복합 액션 {i+1}/{total_actions} 실행: {action_info}")
                 action = action_info.get('action')
+                
+                # 각 액션을 개별적으로 처리
+                action_success = False
                 
                 if action == 'first':
                     count = action_info.get('count', 1)
-                    # first:n을 1,2,...,n으로 변환
-                    positions = list(range(1, count + 1))
-                    logger.info(f"처음 {count}개 이미지 번역 실행: {count}")
-                    combined_positions.extend(positions)
+                    # first:n 형태로 처리
+                    command = f"first:{count}"
+                    logger.info(f"처음 {count}개 이미지 번역 실행: {command}")
+                    action_success = self.image_translate(command)
                     
                 elif action == 'last':
                     count = action_info.get('count', 1)
-                    # last:n은 특별 처리 필요 (이미지 총 개수를 알아야 함)
-                    logger.info(f"마지막 {count}개 이미지 번역 실행: last:{count}")
-                    combined_positions.append(f"last:{count}")
+                    # last:n 형태로 처리
+                    command = f"last:{count}"
+                    logger.info(f"마지막 {count}개 이미지 번역 실행: {command}")
+                    action_success = self.image_translate(command)
                     
                 elif action == 'specific':
                     positions = action_info.get('positions', [])
-                    logger.info(f"특정 위치 이미지 번역 실행: {positions}")
-                    combined_positions.extend(positions)
+                    # 위치들을 쉼표로 연결하여 처리
+                    command = ','.join(str(pos) for pos in positions)
+                    logger.info(f"특정 위치 이미지 번역 실행: {command}")
+                    action_success = self.image_translate(command)
                     
                 elif action == 'special':
                     max_position = action_info.get('max_position', 10)
-                    logger.info(f"제한된 스캔 이미지 번역 실행: special:{max_position}")
-                    combined_positions.append(f"special:{max_position}")
+                    # special:n 형태로 처리
+                    command = f"special:{max_position}"
+                    logger.info(f"제한된 스캔 이미지 번역 실행: {command}")
+                    action_success = self.image_translate(command)
                     
                 elif action == 'yes':
                     # 기본 동작: 모든 이미지 번역
-                    logger.info("모든 이미지 번역 실행")
-                    combined_positions.append('all')
+                    command = "specific:all"
+                    logger.info(f"모든 이미지 번역 실행: {command}")
+                    action_success = self.image_translate(command)
+                
+                if action_success:
+                    success_count += 1
+                    logger.info(f"복합 액션 {i+1}/{total_actions} 성공")
+                else:
+                    logger.warning(f"복합 액션 {i+1}/{total_actions} 실패")
             
-            # 통합된 위치들을 하나의 명령어로 변환하여 처리
-            if combined_positions:
-                # 위치들을 쉼표로 연결하여 하나의 명령어로 만들기
-                combined_command = ','.join(str(pos) for pos in combined_positions)
-                logger.info(f"통합 이미지 번역 명령어: {combined_command}")
-                return self.image_translate(combined_command)
+            # 전체 결과 평가
+            if success_count > 0:
+                logger.info(f"복합 이미지 번역 완료: {success_count}/{total_actions} 성공")
+                return True
             else:
-                logger.warning("복합 액션에서 처리할 위치가 없음")
+                logger.warning(f"복합 이미지 번역 실패: 모든 액션 실패 (0/{total_actions})")
                 return False
                 
         except Exception as e:
@@ -2007,6 +2055,7 @@ class ProductEditorCore3:
             logger.error(f"위치 기반 이미지 번역 중 오류: {e}")
             return False
     
+
     def _translate_images_direct(self, action_info):
         """
         직접 구현을 통한 이미지 번역 (image_manager 실패 시 백업)
@@ -2584,7 +2633,7 @@ class ProductEditorCore3:
             logger.error(f"상품 그룹 이동 중 오류: {e}")
             return False
     
-    def process_keyword_with_individual_modifications(self, keyword, target_group, task_data):
+    def process_keyword_with_individual_modifications(self, keyword, target_group, task_data, max_products=20, step3_image_limit=None):
         """
         키워드로 검색된 모든 상품을 개별적으로 수정 후 target_group으로 이동
         
@@ -2592,12 +2641,25 @@ class ProductEditorCore3:
             keyword: 검색 키워드
             target_group: 이동할 그룹명
             task_data: H~L열 수정 데이터
+            max_products: 최대 처리할 상품 수 (기본값: 20)
+            step3_image_limit: 이미지 번역 수량 제한 (None이면 기본값 사용)
             
         Returns:
             tuple: (성공 여부, 처리된 상품 수)
         """
         try:
-            logger.info(f"키워드 '{keyword}' 상품들의 개별 수정 및 이동 시작")
+            # max_products가 None이면 self.step3_product_limit 사용
+            if max_products is None:
+                max_products = self.step3_product_limit or 20
+            
+            # step3_image_limit 파라미터 처리 (None이 아닐 때만 변경)
+            original_limit = None
+            if step3_image_limit is not None and step3_image_limit != self.step3_image_limit:
+                original_limit = self.step3_image_limit
+                self.step3_image_limit = step3_image_limit
+                logger.info(f"이미지 번역 수량 제한을 {original_limit}에서 {step3_image_limit}로 임시 변경")
+            
+            logger.info(f"키워드 '{keyword}' 상품들의 개별 수정 및 이동 시작 (상품 제한: {max_products}개, 이미지 제한: {self.step3_image_limit}개)")
             
             # 드라이버 연결 상태 검증
             try:
@@ -2609,18 +2671,20 @@ class ProductEditorCore3:
             
             total_processed = 0
             
-            # 키워드로 상품 검색 (상품 수 20개로 제한)
-            product_count = self.search_products_by_keyword(keyword, max_products=20)
+            # 키워드로 상품 검색 (상품 수 제한)
+            product_count = self.search_products_by_keyword(keyword, max_products=max_products)
             
             if product_count == 0:
                 logger.info(f"키워드 '{keyword}'로 검색된 상품이 없습니다. 작업 완료.")
                 return True, 0
             
-            logger.info(f"현재 페이지에 {product_count}개 상품 발견 (최대 20개로 제한됨)")
+            # 실제 처리할 상품 수를 max_products로 제한
+            actual_products_to_process = min(product_count, max_products)
+            logger.info(f"현재 페이지에 {product_count}개 상품 발견, 실제 처리할 상품: {actual_products_to_process}개 (최대 {max_products}개로 제한됨)")
             
-            # 현재 페이지의 모든 상품 처리
-            for i in range(product_count):  # 제한된 상품 수만큼 처리
-                    logger.info(f"상품 {i+1}/{product_count} 처리 중")
+            # 현재 페이지의 제한된 상품만 처리
+            for i in range(actual_products_to_process):  # 제한된 상품 수만큼 처리
+                    logger.info(f"상품 {i+1}/{actual_products_to_process} 처리 중")
                     
                     # 두 번째 상품부터는 화면 최상단으로 이동
                     if i > 0:
@@ -2633,9 +2697,17 @@ class ProductEditorCore3:
                         logger.error(f"상품 {i+1} 모달창 열기 실패")
                         continue
                     
+                    # 상품별 번역 이미지 수 초기화
+                    self.reset_current_product_translation_count()
+                    
                     # H~L열 수정 작업 수행
                     if not self.process_product_modifications(task_data):
                         logger.warning(f"상품 {i+1} 수정 작업 실패")
+                    else:
+                        # 상품 수정 완료 후 번역 이미지 수 로그
+                        product_translated = self.get_current_product_translation_count()
+                        if product_translated > 0:
+                            logger.info(f"상품 {i+1} 수정 완료 - 이번 상품에서 번역된 이미지: {product_translated}개")
                     
                     # 상품을 target_group으로 이동
                     if not self.move_product_to_target_group(target_group):
@@ -2643,14 +2715,34 @@ class ProductEditorCore3:
                     
                     total_processed += 1
                     
+                    # 이미지 번역 수 제한 확인
+                    if self.is_translation_limit_reached():
+                        logger.warning(f"이미지 번역 수 제한 달성! 총 {self.get_total_translation_count()}/{self.step3_image_limit}개 번역 완료")
+                        logger.info(f"키워드 '{keyword}' 처리 중단 - 이미지 번역 제한 달성으로 인한 조기 종료")
+                        break
+                    
                     # 작업 간 대기
                     time.sleep(DELAY_SHORT)
             
-            logger.info(f"키워드 '{keyword}' 총 {total_processed}개 상품 처리 완료")
+            # 키워드 처리 완료 로그
+            total_translated = self.get_total_translation_count()
+            logger.info(f"키워드 '{keyword}' 총 {total_processed}개 상품 처리 완료 - 총 번역 이미지: {total_translated}/{self.step3_image_limit}개")
+            
+            # step3_image_limit 원래 값으로 복원
+            if original_limit is not None:
+                self.step3_image_limit = original_limit
+                logger.info(f"이미지 번역 수량 제한을 원래 값 {original_limit}로 복원")
+            
             return True, total_processed
             
         except Exception as e:
             logger.error(f"키워드 '{keyword}' 처리 중 오류: {e}")
+            
+            # 예외 발생 시에도 step3_image_limit 원래 값으로 복원
+            if original_limit is not None:
+                self.step3_image_limit = original_limit
+                logger.info(f"예외 발생으로 인한 이미지 번역 수량 제한 복원: {original_limit}")
+            
             return False, 0
     
     def image_translate(self, action_value):
@@ -2663,7 +2755,43 @@ class ProductEditorCore3:
         Returns:
             bool: 성공 여부
         """
-        return self.image_translation_handler.image_translate(action_value, 'detail')
+        # 이미지 번역 수 제한 확인
+        # 배치 제한 관리자가 있으면 해당 제한을 사용, 없으면 기존 제한 사용
+        if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+            image_limit = self.batch_limit_manager.image_limit
+        else:
+            image_limit = self.step3_image_limit
+            
+        if self.total_translated_images >= image_limit:
+            logger.warning(f"이미지 번역 수 제한 달성 ({self.total_translated_images}/{image_limit}). 번역을 건너뜁니다.")
+            return True  # 제한 달성 시 성공으로 처리하여 작업 계속 진행
+        
+        # 번역 전 개수 기록
+        before_count = self.total_translated_images
+        
+        # 실제 번역 수행 - 실제 번역된 개수 반환
+        translated_count = self.image_translation_handler.image_translate(action_value, 'detail')
+        
+        if translated_count > 0:
+            # 실제 번역된 이미지 수 사용
+            self.total_translated_images += translated_count
+            self.current_product_translated_images += translated_count
+            # 배치 제한 관리자가 있으면 해당 값을 업데이트하고 사용
+            if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+                self.batch_limit_manager.add_translated_images(translated_count)
+                current_chunk_images = self.batch_limit_manager.get_current_chunk_images_translated()
+                logger.info(f"상세 이미지 번역 완료: +{translated_count}개 (총 {current_chunk_images}/{self.step3_image_limit})")
+            else:
+                logger.info(f"상세 이미지 번역 완료: +{translated_count}개 (총 {self.total_translated_images}/{self.step3_image_limit})")
+            return True
+        else:
+            # 배치 제한 관리자가 있으면 해당 값을 사용, 없으면 기존 방식 사용
+            if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+                current_chunk_images = self.batch_limit_manager.get_current_chunk_images_translated()
+                logger.info(f"상세 이미지 번역 대상 없음: +0개 (총 {current_chunk_images}/{self.step3_image_limit})")
+            else:
+                logger.info(f"상세 이미지 번역 대상 없음: +0개 (총 {self.total_translated_images}/{self.step3_image_limit})")
+            return True  # 번역할 이미지가 없는 것은 실패가 아니므로 True 반환
         
     def thumbnailimage_translate(self, action_value):
         """
@@ -2675,7 +2803,43 @@ class ProductEditorCore3:
         Returns:
             bool: 성공 여부
         """
-        return self.image_translation_handler.image_translate(action_value, 'thumbnail')
+        # 이미지 번역 수 제한 확인
+        # 배치 제한 관리자가 있으면 해당 제한을 사용, 없으면 기존 제한 사용
+        if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+            image_limit = self.batch_limit_manager.image_limit
+        else:
+            image_limit = self.step3_image_limit
+            
+        if self.total_translated_images >= image_limit:
+            logger.warning(f"이미지 번역 수 제한 달성 ({self.total_translated_images}/{image_limit}). 번역을 건너뜁니다.")
+            return True  # 제한 달성 시 성공으로 처리하여 작업 계속 진행
+        
+        # 번역 전 개수 기록
+        before_count = self.total_translated_images
+        
+        # 실제 번역 수행 - 실제 번역된 개수 반환
+        translated_count = self.image_translation_handler.image_translate(action_value, 'thumbnail')
+        
+        if translated_count > 0:
+            # 실제 번역된 이미지 수 사용
+            self.total_translated_images += translated_count
+            self.current_product_translated_images += translated_count
+            # 배치 제한 관리자가 있으면 해당 값을 업데이트하고 사용
+            if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+                self.batch_limit_manager.add_translated_images(translated_count)
+                current_chunk_images = self.batch_limit_manager.get_current_chunk_images_translated()
+                logger.info(f"썸네일 이미지 번역 완료: +{translated_count}개 (총 {current_chunk_images}/{self.step3_image_limit})")
+            else:
+                logger.info(f"썸네일 이미지 번역 완료: +{translated_count}개 (총 {self.total_translated_images}/{self.step3_image_limit})")
+            return True
+        else:
+            # 배치 제한 관리자가 있으면 해당 값을 사용, 없으면 기존 방식 사용
+            if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+                current_chunk_images = self.batch_limit_manager.get_current_chunk_images_translated()
+                logger.info(f"썸네일 이미지 번역 대상 없음: +0개 (총 {current_chunk_images}/{self.step3_image_limit})")
+            else:
+                logger.info(f"썸네일 이미지 번역 대상 없음: +0개 (총 {self.total_translated_images}/{self.step3_image_limit})")
+            return True  # 번역할 이미지가 없는 것은 실패가 아니므로 True 반환
         
     def optionimage_translate(self, action_value):
         """
@@ -2687,7 +2851,118 @@ class ProductEditorCore3:
         Returns:
             bool: 성공 여부
         """
-        return self.image_translation_handler.image_translate(action_value, 'option')
+        # 이미지 번역 수 제한 확인
+        # 배치 제한 관리자가 있으면 해당 제한을 사용, 없으면 기존 제한 사용
+        if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+            image_limit = self.batch_limit_manager.image_limit
+        else:
+            image_limit = self.step3_image_limit
+            
+        if self.total_translated_images >= image_limit:
+            logger.warning(f"이미지 번역 수 제한 달성 ({self.total_translated_images}/{image_limit}). 번역을 건너뜁니다.")
+            return True  # 제한 달성 시 성공으로 처리하여 작업 계속 진행
+        
+        # 번역 전 개수 기록
+        before_count = self.total_translated_images
+        
+        # 실제 번역 수행 - 실제 번역된 개수 반환
+        translated_count = self.image_translation_handler.image_translate(action_value, 'option')
+        
+        if translated_count > 0:
+            # 실제 번역된 이미지 수 사용
+            self.total_translated_images += translated_count
+            self.current_product_translated_images += translated_count
+            # 배치 제한 관리자가 있으면 해당 값을 업데이트하고 사용
+            if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+                self.batch_limit_manager.add_translated_images(translated_count)
+                current_chunk_images = self.batch_limit_manager.get_current_chunk_images_translated()
+                logger.info(f"옵션 이미지 번역 완료: +{translated_count}개 (총 {current_chunk_images}/{self.step3_image_limit})")
+            else:
+                logger.info(f"옵션 이미지 번역 완료: +{translated_count}개 (총 {self.total_translated_images}/{self.step3_image_limit})")
+            return True
+        else:
+            # 배치 제한 관리자가 있으면 해당 값을 사용, 없으면 기존 방식 사용
+            if hasattr(self, 'batch_limit_manager') and self.batch_limit_manager:
+                current_chunk_images = self.batch_limit_manager.get_current_chunk_images_translated()
+                logger.info(f"옵션 이미지 번역 대상 없음: +0개 (총 {current_chunk_images}/{self.step3_image_limit})")
+            else:
+                logger.info(f"옵션 이미지 번역 대상 없음: +0개 (총 {self.total_translated_images}/{self.step3_image_limit})")
+            return True  # 번역할 이미지가 없는 것은 실패가 아니므로 True 반환
+    
+    def _estimate_translated_count(self, action_value):
+        """
+        액션 값을 파싱하여 번역될 이미지 수를 추정
+        
+        Args:
+            action_value (str): 액션 값 (예: "first:1", "first:2", "specific:2", "specific:2,3")
+            
+        Returns:
+            int: 추정 번역 이미지 수
+        """
+        try:
+            if not action_value or action_value.strip() == "":
+                return 0
+            
+            # "first:N" 형태 처리
+            if action_value.startswith("first:"):
+                count_str = action_value.split(":")[1]
+                return int(count_str)
+            
+            # "specific:N" 또는 "specific:N,M,L" 형태 처리
+            elif action_value.startswith("specific:"):
+                positions_str = action_value.split(":")[1]
+                positions = positions_str.split(",")
+                return len(positions)
+            
+            # "all" 형태 처리 (기본값 5개로 추정)
+            elif action_value == "all":
+                return 5
+            
+            # 숫자만 있는 경우
+            elif action_value.isdigit():
+                return int(action_value)
+            
+            # 기타 경우 기본값 1개
+            else:
+                return 1
+                
+        except Exception as e:
+            logger.warning(f"번역 이미지 수 추정 실패 ({action_value}): {e}. 기본값 1개로 설정")
+            return 1
+    
+    def reset_current_product_translation_count(self):
+        """
+        현재 상품의 번역 이미지 수 초기화
+        """
+        self.current_product_translated_images = 0
+        logger.debug("현재 상품 번역 이미지 수 초기화")
+    
+    def get_current_product_translation_count(self):
+        """
+        현재 상품에서 번역된 이미지 수 반환
+        
+        Returns:
+            int: 현재 상품 번역 이미지 수
+        """
+        return self.current_product_translated_images
+    
+    def get_total_translation_count(self):
+        """
+        총 번역된 이미지 수 반환
+        
+        Returns:
+            int: 총 번역 이미지 수
+        """
+        return self.total_translated_images
+    
+    def is_translation_limit_reached(self):
+        """
+        이미지 번역 수 제한 달성 여부 확인
+        
+        Returns:
+            bool: 제한 달성 여부
+        """
+        return self.total_translated_images >= self.step3_image_limit
     
     def update_driver_references(self, new_driver):
         """
@@ -2791,3 +3066,62 @@ class ProductEditorCore3:
         except Exception as e:
             logger.error(f"안전한 드라이버 작업 실행 중 오류: {e}")
             raise
+    
+    def process_keyword_with_batch_limits(self, keyword, target_group, task_data, max_products=20, max_images=2000, batch_limit_manager=None):
+        """
+        배치 제한을 고려한 키워드 처리 (새로운 메서드)
+        
+        Args:
+            keyword: 처리할 키워드
+            target_group: 타겟 그룹
+            task_data: 작업 데이터 딕셔너리
+            max_products: 최대 상품 수
+            max_images: 최대 이미지 번역 수
+            batch_limit_manager: 배치 제한 관리자
+            
+        Returns:
+            Tuple[bool, int]: (성공 여부, 처리된 상품 수)
+        """
+        try:
+            logger.info(f"배치 제한 인식 키워드 처리 시작: '{keyword}' (최대 상품: {max_products}개, 최대 이미지: {max_images}개)")
+            
+            # 배치 제한 관리자가 있으면 설정하고 현재 번역 수 동기화
+            self.batch_limit_manager = batch_limit_manager
+            if batch_limit_manager:
+                batch_limit_manager.total_images_translated = self.total_translated_images
+                logger.info(f"배치 제한 관리자 초기화: 기존 번역 이미지 수 {self.total_translated_images}개 동기화")
+            
+            # 기존 제한값 백업 및 새 제한값 설정
+            original_product_limit = self.step3_product_limit
+            original_image_limit = self.step3_image_limit
+            
+            self.step3_product_limit = max_products
+            self.step3_image_limit = max_images
+            
+            try:
+                # 기존 메서드 호출
+                success, processed_count = self.process_keyword_with_individual_modifications(
+                    keyword=keyword,
+                    target_group=target_group,
+                    task_data=task_data,
+                    max_products=max_products,
+                    step3_image_limit=max_images
+                )
+                
+                # 배치 제한 관리자에 결과 반영
+                if batch_limit_manager and success:
+                    batch_limit_manager.add_processed_products(processed_count)
+                    batch_limit_manager.total_images_translated = self.total_translated_images
+                    
+                    logger.info(f"배치 제한 관리자 업데이트: 상품 +{processed_count}개, 이미지 총 {self.total_translated_images}개")
+                
+                return success, processed_count
+                
+            finally:
+                # 원래 제한값 복원
+                self.step3_product_limit = original_product_limit
+                self.step3_image_limit = original_image_limit
+                
+        except Exception as e:
+            logger.error(f"배치 제한 인식 키워드 처리 중 오류: {e}")
+            return False, 0

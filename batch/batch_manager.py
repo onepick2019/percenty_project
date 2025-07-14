@@ -34,6 +34,13 @@ from product_editor_screen import open_product_editor_screen
 from timesleep import DELAY_STANDARD, DELAY_SHORT
 from human_delay import HumanLikeDelay
 
+# 텔레그램 알림 모듈 임포트
+try:
+    from telegram_notifier import TelegramNotifier
+except ImportError:
+    TelegramNotifier = None
+    logger.warning("텔레그램 알림 모듈을 찾을 수 없습니다. 알림 기능이 비활성화됩니다.")
+
 logger = logging.getLogger(__name__)
 
 # 계정 매핑 캐시
@@ -354,6 +361,10 @@ class BatchManager:
         
         # 배치 결과 저장 (보고서용)
         self.batch_results = []
+        
+        # 텔레그램 알림 설정
+        self.telegram_notifier = None
+        self._setup_telegram_notifier()
     
     def load_config(self):
         """
@@ -395,6 +406,15 @@ class BatchManager:
             'logging': {
                 'level': 'INFO',
                 'file': 'logs/batch_manager.log'
+            },
+            'telegram': {
+                'enabled': False,
+                'bot_token': '',
+                'chat_id': '',
+                'notify_start': True,
+                'notify_complete': True,
+                'notify_error': True,
+                'notify_warning': True
             }
         }
     
@@ -409,6 +429,93 @@ class BatchManager:
             logger.info(f"설정 파일 저장 완료: {self.config_file}")
         except Exception as e:
             logger.error(f"설정 파일 저장 중 오류: {e}")
+    
+    def _setup_telegram_notifier(self):
+        """
+        텔레그램 알림 설정
+        """
+        try:
+            telegram_config = self.config.get('telegram', {})
+            
+            if (TelegramNotifier and 
+                telegram_config.get('enabled', False) and 
+                telegram_config.get('bot_token') and 
+                telegram_config.get('chat_id')):
+                
+                self.telegram_notifier = TelegramNotifier(
+                    bot_token=telegram_config['bot_token'],
+                    chat_id=telegram_config['chat_id']
+                )
+                
+                # 연결 테스트
+                if self.telegram_notifier.test_connection():
+                    logger.info("텔레그램 알림이 성공적으로 설정되었습니다.")
+                else:
+                    logger.warning("텔레그램 알림 연결 테스트에 실패했습니다.")
+                    self.telegram_notifier = None
+            else:
+                logger.info("텔레그램 알림이 비활성화되어 있습니다.")
+                
+        except Exception as e:
+            logger.error(f"텔레그램 알림 설정 중 오류: {e}")
+            self.telegram_notifier = None
+    
+    def _send_telegram_notification(self, notification_type: str, **kwargs):
+        """
+        텔레그램 알림 전송
+        
+        Args:
+            notification_type: 알림 타입 (start, complete, error, warning)
+            **kwargs: 알림에 필요한 추가 정보
+        """
+        if not self.telegram_notifier:
+            return
+        
+        try:
+            telegram_config = self.config.get('telegram', {})
+            
+            # 알림 타입별 활성화 여부 확인
+            notify_key = f"notify_{notification_type}"
+            if not telegram_config.get(notify_key, True):
+                return
+            
+            account_id = kwargs.get('account_id', 'Unknown')
+            step_name = kwargs.get('step_name', 'Unknown')
+            server_name = kwargs.get('server_name', 'Unknown')
+            
+            if notification_type == 'start':
+                self.telegram_notifier.send_batch_start_notification(
+                    account_email=account_id,
+                    step_name=step_name,
+                    server_name=server_name
+                )
+            elif notification_type == 'complete':
+                duration_minutes = kwargs.get('duration_minutes', 0)
+                self.telegram_notifier.send_batch_complete_notification(
+                    account_email=account_id,
+                    step_name=step_name,
+                    server_name=server_name,
+                    duration_minutes=duration_minutes
+                )
+            elif notification_type == 'error':
+                error_message = kwargs.get('error_message', 'Unknown error')
+                self.telegram_notifier.send_batch_error_notification(
+                    account_email=account_id,
+                    step_name=step_name,
+                    server_name=server_name,
+                    error_message=error_message
+                )
+            elif notification_type == 'warning':
+                warning_message = kwargs.get('warning_message', 'Unknown warning')
+                self.telegram_notifier.send_batch_warning_notification(
+                    account_email=account_id,
+                    step_name=step_name,
+                    server_name=server_name,
+                    warning_message=warning_message
+                )
+                
+        except Exception as e:
+            logger.error(f"텔레그램 알림 전송 중 오류: {e}")
     
     def execute_single_step(self, account_id: str, step: str, quantity: int) -> bool:
         """
@@ -463,7 +570,9 @@ class BatchManager:
             return False
     
     def run_single_step(self, step: int, accounts: List[str], quantity: int,
-                        concurrent: bool = True, interval: int = None, chunk_size: int = 20) -> Dict:
+                        concurrent: bool = True, interval: int = None, chunk_size: int = 20,
+                        step3_product_limit: int = None, step3_image_limit: int = None,
+                        reset_progress: bool = True) -> Dict:
         """
         단일 단계 배치 실행
         
@@ -473,6 +582,10 @@ class BatchManager:
             quantity: 각 계정당 처리할 수량
             concurrent: 동시 실행 여부
             interval: 계정 간 실행 간격(초)
+            chunk_size: 청크 크기
+            step3_product_limit: 3단계 상품 수량 제한
+            step3_image_limit: 3단계 이미지 번역 수량 제한
+            reset_progress: 진행 상황 파일 초기화 여부
             
         Returns:
             Dict: 실행 결과
@@ -485,6 +598,22 @@ class BatchManager:
         logger.info(f"로그 파일 구분자: {self.start_time}")
         if interval is not None:
             logger.info(f"계정 간 실행 간격: {interval}초")
+        if step3_product_limit is not None:
+            logger.info(f"3단계 상품 수량 제한: {step3_product_limit}")
+        if step3_image_limit is not None:
+            logger.info(f"3단계 이미지 번역 수량 제한: {step3_image_limit}")
+        # 디버깅: reset_progress 값 확인
+        logger.info(f"🔍 DEBUG: reset_progress 값 = {reset_progress} (타입: {type(reset_progress)})")
+        
+        if reset_progress:
+            logger.info("🔄 진행 상황 파일 초기화 활성화")
+            if step in [31, 32, 33, 311, 312, 313, 321, 322, 323, 331, 332, 333]:
+                logger.info(f"🔄 단계 {step}은 3단계 관련 단계입니다. 진행 상황 파일 초기화를 실행합니다.")
+                self._reset_step3_progress_files(accounts, step)
+            else:
+                logger.info(f"🔄 단계 {step}은 3단계 관련 단계가 아닙니다. 진행 상황 파일 초기화를 건너뜁니다.")
+        else:
+            logger.info(f"🔄 진행 상황 파일 초기화 비활성화 (reset_progress={reset_progress})")
         
         # 계정별 로거 초기화
         for account_id in accounts:
@@ -494,11 +623,11 @@ class BatchManager:
         try:
             if concurrent and len(accounts) > 1:
                 logger.info("동시 실행 모드로 단일 단계 실행")
-                result = self._run_concurrent_single_step(task_id, step, accounts, quantity, chunk_size)
+                result = self._run_concurrent_single_step(task_id, step, accounts, quantity, chunk_size, step3_product_limit, step3_image_limit, reset_progress)
             else:
                 logger.info("순차 실행 모드로 단일 단계 실행 시작")
                 logger.info(f"_run_sequential_single_step 호출 전 시간: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                result = self._run_sequential_single_step(task_id, step, accounts, quantity, interval, chunk_size)
+                result = self._run_sequential_single_step(task_id, step, accounts, quantity, interval, chunk_size, step3_product_limit, step3_image_limit, reset_progress)
                 logger.info(f"_run_sequential_single_step 호출 후 시간: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             
             # 배치 결과 저장
@@ -609,8 +738,156 @@ class BatchManager:
         logger.info("📊 === 배치 실행 결과 상세 정보 완료 ===")
         logger.info("")
     
+    def _reset_step3_progress_files(self, accounts: List[str], step: int = None):
+        """
+        3단계 진행 상황 파일들을 초기화
+        
+        Args:
+            accounts: 계정 ID 목록
+            step: 단계 번호 (특정 단계의 파일만 삭제하려는 경우)
+        """
+        import os
+        import glob
+        
+        logger.info("🔄 3단계 진행 상황 파일 초기화 시작")
+        
+        total_deleted = 0
+        
+        for account_id in accounts:
+            account_deleted = 0
+            
+            # 실제 이메일 주소로 변환
+            real_account_id = get_real_account_id(account_id)
+            logger.info(f"🔄 진행 상황 파일 검색 대상: {real_account_id} (원본 ID: {account_id})")
+            
+            # 프로젝트 루트 디렉토리에서 진행 상황 파일 검색
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
+            # 특정 단계가 지정된 경우 해당 단계의 코어 파일만 삭제
+            if step and step in [31, 32, 33, 311, 312, 313, 321, 322, 323, 331, 332, 333]:
+                # 단계별 코어 파일명 매핑
+                step_core_mapping = {
+                    31: "step3_1_core",
+                    32: "step3_2_core",
+                    33: "step3_3_core",
+                    311: "step3_1_1_core",
+                    312: "step3_1_2_core",
+                    313: "step3_1_3_core",
+                    321: "step3_2_1_core",
+                    322: "step3_2_2_core",
+                    323: "step3_2_3_core",
+                    331: "step3_3_1_core",
+                    332: "step3_3_2_core",
+                    333: "step3_3_3_core"
+                }
+                
+                core_name = step_core_mapping.get(step)
+                if core_name:
+                    pattern = os.path.join(project_root, f"progress_{real_account_id}_{core_name}.json")
+                    logger.info(f"🔄 특정 단계({step}) 검색 패턴: {pattern}")
+                else:
+                    logger.warning(f"⚠️ 알 수 없는 단계: {step}")
+                    continue
+            else:
+                # 모든 3단계 파일 삭제 (기존 동작)
+                pattern = os.path.join(project_root, f"progress_{real_account_id}_step3_*.json")
+                logger.info(f"🔄 전체 3단계 검색 패턴: {pattern}")
+            
+            logger.info(f"🔄 프로젝트 루트: {project_root}")
+            
+            matching_files = glob.glob(pattern)
+            logger.info(f"🔄 검색된 파일 수: {len(matching_files)}")
+            
+            for progress_file in matching_files:
+                logger.info(f"🔄 삭제 대상 파일: {progress_file}")
+                try:
+                    os.remove(progress_file)
+                    account_deleted += 1
+                    total_deleted += 1
+                    logger.info(f"✅ 삭제 성공: {progress_file}")
+                except Exception as e:
+                    logger.error(f"❌ 파일 삭제 실패 {progress_file}: {e}")
+            
+            if account_deleted > 0:
+                logger.info(f"🔄 계정 '{real_account_id}': {account_deleted}개 진행 상황 파일 삭제 완료")
+            else:
+                logger.info(f"🔄 계정 '{real_account_id}': 삭제할 진행 상황 파일 없음")
+        
+        logger.info(f"🔄 3단계 진행 상황 파일 초기화 완료 - 총 {total_deleted}개 파일 삭제")
+        logger.info("")
+    
+    def _reset_step3_progress_files_for_account(self, account_id: str, step: int = None):
+        """
+        특정 계정의 3단계 진행 상황 파일을 초기화합니다.
+        
+        Args:
+            account_id: 계정 ID
+            step: 단계 번호 (특정 단계의 파일만 삭제하려는 경우)
+        """
+        import os
+        
+        logger.info(f"🔄 계정 '{account_id}'의 3단계 진행 상황 파일 초기화 시작")
+        
+        import glob
+        
+        deleted_files = []
+        
+        # 프로젝트 루트 디렉토리에서 진행 상황 파일 검색
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # 특정 단계가 지정된 경우 해당 단계의 코어 파일만 삭제
+        if step and step in [31, 32, 33, 311, 312, 313, 321, 322, 323, 331, 332, 333]:
+            # 단계별 코어 파일명 매핑
+            step_core_mapping = {
+                31: "step3_1_core",
+                32: "step3_2_core",
+                33: "step3_3_core",
+                311: "step3_1_1_core",
+                312: "step3_1_2_core",
+                313: "step3_1_3_core",
+                321: "step3_2_1_core",
+                322: "step3_2_2_core",
+                323: "step3_2_3_core",
+                331: "step3_3_1_core",
+                332: "step3_3_2_core",
+                333: "step3_3_3_core"
+            }
+            
+            core_name = step_core_mapping.get(step)
+            if core_name:
+                pattern = os.path.join(project_root, f"progress_{account_id}_{core_name}.json")
+                logger.info(f"🔄 특정 단계({step}) 검색 패턴: {pattern}")
+            else:
+                logger.warning(f"⚠️ 알 수 없는 단계: {step}")
+                return
+        else:
+            # 모든 3단계 파일 삭제 (기존 동작)
+            pattern = os.path.join(project_root, f"progress_{account_id}_step3_*.json")
+            logger.info(f"🔄 전체 3단계 검색 패턴: {pattern}")
+        
+        logger.info(f"🔄 프로젝트 루트: {project_root}")
+        
+        matching_files = glob.glob(pattern)
+        logger.info(f"🔄 검색된 파일 수: {len(matching_files)}")
+        
+        for progress_file in matching_files:
+            logger.info(f"🔄 삭제 대상 파일: {progress_file}")
+            try:
+                os.remove(progress_file)
+                deleted_files.append(progress_file)
+                logger.info(f"✅ 삭제 성공: {progress_file}")
+            except Exception as e:
+                logger.error(f"❌ 파일 삭제 실패 {progress_file}: {e}")
+        
+        if deleted_files:
+            logger.info(f"🔄 계정 '{account_id}': 총 {len(deleted_files)}개의 진행 상황 파일이 삭제되었습니다.")
+        else:
+            logger.info(f"🔄 계정 '{account_id}': 삭제할 진행 상황 파일이 없습니다.")
+    
     def _run_concurrent_single_step(self, task_id: str, step: int,
-                                     accounts: List[str], quantity: int, chunk_size: int = 20) -> Dict:
+                                     accounts: List[str], quantity: int, chunk_size: int = 20,
+                                     step3_product_limit: int = None, step3_image_limit: int = None,
+                                     reset_progress: bool = True) -> Dict:
         """
         동시 실행 단일 단계
         
@@ -639,7 +916,7 @@ class BatchManager:
             for account_id in accounts:
                 future = self.executor.submit(
                     self._execute_step_for_account, 
-                    step, account_id, quantity, chunk_size
+                    step, account_id, quantity, chunk_size, step3_product_limit, step3_image_limit, reset_progress
                 )
                 future_to_account[future] = account_id
             
@@ -676,7 +953,9 @@ class BatchManager:
         return results
     
     def _run_sequential_single_step(self, task_id: str, step: int,
-                                   accounts: List[str], quantity: int, interval: int = None, chunk_size: int = 20) -> Dict:
+                                   accounts: List[str], quantity: int, interval: int = None, chunk_size: int = 20,
+                                   step3_product_limit: int = None, step3_image_limit: int = None,
+                                   reset_progress: bool = True) -> Dict:
         """
         순차 실행 단일 단계
         
@@ -713,7 +992,7 @@ class BatchManager:
                 logger.info(f"계정 {account_id} 처리 시작 시간: {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 logger.info(f"_execute_step_for_account 호출 전: step={step}, account_id={account_id}, quantity={quantity}, chunk_size={chunk_size}")
-                result = self._execute_step_for_account(step, account_id, quantity, chunk_size)
+                result = self._execute_step_for_account(step, account_id, quantity, chunk_size, step3_product_limit, step3_image_limit, reset_progress)
                 logger.info(f"_execute_step_for_account 호출 후: result={result}")
                 
                 results['results'][account_id] = result
@@ -749,7 +1028,9 @@ class BatchManager:
         
         return results
     
-    def _execute_step_for_account(self, step: int, account_id: str, quantity: int, chunk_size: int = 20) -> Dict:
+    def _execute_step_for_account(self, step: int, account_id: str, quantity: int, chunk_size: int = 20,
+                                  step3_product_limit: int = None, step3_image_limit: int = None,
+                                  reset_progress: bool = True) -> Dict:
         """
         특정 계정에 대해 단계 실행
         
@@ -771,6 +1052,28 @@ class BatchManager:
             self.account_loggers[account_id] = account_logger
         
         account_logger.info(f"=== {step}단계 실행 시작: 수량={quantity} ===")
+        
+        # 3단계 관련 단계일 때 진행 상황 파일 초기화
+        if reset_progress and step in [31, 32, 33, 311, 312, 313, 321, 322, 323, 331, 332, 333]:
+            account_logger.info(f"3단계 진행 상황 파일 초기화 시작 (단계: {step})")
+            try:
+                # 실제 이메일 주소를 사용하여 진행 상황 파일 초기화
+                real_account_id = get_real_account_id(account_id)
+                account_logger.info(f"진행 상황 파일 초기화 대상: {real_account_id} (원본 ID: {account_id})")
+                self._reset_step3_progress_files_for_account(real_account_id, step)
+                account_logger.info(f"3단계 진행 상황 파일 초기화 완료")
+            except Exception as reset_error:
+                account_logger.warning(f"진행 상황 파일 초기화 중 오류: {reset_error}")
+        
+        # 텔레그램 시작 알림
+        start_time = datetime.now()
+        real_account_id = get_real_account_id(account_id)
+        self._send_telegram_notification(
+            'start',
+            account_id=real_account_id,
+            step_name=f"Step {step}",
+            server_name="배치 서버"
+        )
         
         result = {
             'success': False,
@@ -1320,8 +1623,8 @@ class BatchManager:
                     from core.steps.step3_1_core import Step3_1Core
                     
                     driver = self.browser_manager.get_driver(browser_id)
-                    step_core = Step3_1Core(driver)
-                    account_logger.info(f"Step3_1Core 인스턴스 생성 완료")
+                    step_core = Step3_1Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_1Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
                     
                     # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
                     real_account_id = get_real_account_id(account_id)
@@ -1330,12 +1633,15 @@ class BatchManager:
                     
                     # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
                     from product_editor_core3 import ProductEditorCore3
-                    product_editor = ProductEditorCore3(driver)
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
                     task_list = product_editor.load_task_list_from_excel_with_server_filter(
                         account_id=real_account_id,
                         step="step3",
                         server_name="서버1"
                     )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
                     
                     # task_list에서 provider_codes 추출
                     provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
@@ -1349,7 +1655,7 @@ class BatchManager:
                     # 청크 사이즈에 따른 처리 방식 결정
                     if len(provider_codes) > chunk_size:
                         account_logger.info(f"브라우저 재시작 방식으로 31단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
-                        step_result = self._execute_step31_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info)
+                        step_result = self._execute_step31_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
                     else:
                         account_logger.info(f"기존 방식으로 31단계 실행 (키워드 수: {len(provider_codes)})")
                         # Step3_1Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
@@ -1373,8 +1679,8 @@ class BatchManager:
                     from core.steps.step3_2_core import Step3_2Core
                     
                     driver = self.browser_manager.get_driver(browser_id)
-                    step_core = Step3_2Core(driver)
-                    account_logger.info(f"Step3_2Core 인스턴스 생성 완료")
+                    step_core = Step3_2Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_2Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
                     
                     # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
                     real_account_id = get_real_account_id(account_id)
@@ -1383,12 +1689,15 @@ class BatchManager:
                     
                     # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
                     from product_editor_core3 import ProductEditorCore3
-                    product_editor = ProductEditorCore3(driver)
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
                     task_list = product_editor.load_task_list_from_excel_with_server_filter(
                         account_id=real_account_id,
                         step="step3",
                         server_name="서버2"
                     )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
                     
                     # task_list에서 provider_codes 추출
                     provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
@@ -1402,7 +1711,7 @@ class BatchManager:
                     # 청크 사이즈에 따른 처리 방식 결정
                     if len(provider_codes) > chunk_size:
                         account_logger.info(f"브라우저 재시작 방식으로 32단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
-                        step_result = self._execute_step32_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info)
+                        step_result = self._execute_step32_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
                     else:
                         account_logger.info(f"기존 방식으로 32단계 실행 (키워드 수: {len(provider_codes)})")
                         # Step3_2Core 실행
@@ -1426,7 +1735,7 @@ class BatchManager:
                     from core.steps.step3_3_core import Step3_3Core
                     
                     driver = self.browser_manager.get_driver(browser_id)
-                    step_core = Step3_3Core(driver)
+                    step_core = Step3_3Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
                     account_logger.info(f"Step3_3Core 인스턴스 생성 완료")
                     
                     # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
@@ -1436,12 +1745,15 @@ class BatchManager:
                     
                     # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
                     from product_editor_core3 import ProductEditorCore3
-                    product_editor = ProductEditorCore3(driver)
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
                     task_list = product_editor.load_task_list_from_excel_with_server_filter(
                         account_id=real_account_id,
                         step="step3",
                         server_name="서버3"
                     )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
                     
                     # task_list에서 provider_codes 추출
                     provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
@@ -1455,7 +1767,7 @@ class BatchManager:
                     # 청크 사이즈에 따른 처리 방식 결정
                     if len(provider_codes) > chunk_size:
                         account_logger.info(f"브라우저 재시작 방식으로 33단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
-                        step_result = self._execute_step33_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info)
+                        step_result = self._execute_step33_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
                     else:
                         account_logger.info(f"기존 방식으로 33단계 실행 (키워드 수: {len(provider_codes)})")
                         # Step3_3Core 실행
@@ -1472,6 +1784,511 @@ class BatchManager:
                     account_logger.error(f"Step3_3Core 예외 상세: {traceback.format_exc()}")
                     raise
                     
+            # 새로운 9개의 세분화된 Step 3 단계들
+            elif step == 311:
+                account_logger.info(f"311단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_1_1Core 동적 임포트
+                    from core.steps.step3_1_1_core import Step3_1_1Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_1_1Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_1_1Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버1-1"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 311단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step311_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 311단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_1_1Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_1_1(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_1_1Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"311단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_1_1Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_1_1Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 312:
+                account_logger.info(f"312단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_1_2Core 동적 임포트
+                    from core.steps.step3_1_2_core import Step3_1_2Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_1_2Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_1_2Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버1-2"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 312단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step312_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 312단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_1_2Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_1_2(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_1_2Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"312단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_1_2Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_1_2Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 313:
+                account_logger.info(f"313단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_1_3Core 동적 임포트
+                    from core.steps.step3_1_3_core import Step3_1_3Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_1_3Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_1_3Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버1-3"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 31단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step313_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 31단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_1_3Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_1_3(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_1_3Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"313단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_1_3Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_1_3Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 321:
+                account_logger.info(f"321단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_2_1Core 동적 임포트
+                    from core.steps.step3_2_1_core import Step3_2_1Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_2_1Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_2_1Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버2-1"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 321단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step321_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 321단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_2_1Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_2_1(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_2_1Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"321단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_2_1Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_2_1Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 322:
+                account_logger.info(f"322단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_2_2Core 동적 임포트
+                    from core.steps.step3_2_2_core import Step3_2_2Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_2_2Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_2_2Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버2-2"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 322단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step322_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 322단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_2_2Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_2_2(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_2_2Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"322단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_2_2Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_2_2Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 323:
+                account_logger.info(f"323단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_2_3Core 동적 임포트
+                    from core.steps.step3_2_3_core import Step3_2_3Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_2_3Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_2_3Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버2-3"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 322단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step323_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 323단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_2_3Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_2_3(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_2_3Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"323단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_2_3Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_2_3Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 331:
+                account_logger.info(f"331단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_3_1Core 동적 임포트
+                    from core.steps.step3_3_1_core import Step3_3_1Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_3_1Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_3_1Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버3-1"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 331단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step331_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 331단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_3_1Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_3_1(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_3_1Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"331단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_3_1Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_3_1Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 332:
+                account_logger.info(f"332단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_3_2Core 동적 임포트
+                    from core.steps.step3_3_2_core import Step3_3_2Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_3_2Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_3_2Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버3-2"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 332단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step332_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 332단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_1_2Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_3_2(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_3_2Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"332단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_3_2Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_3_2Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
+            elif step == 333:
+                account_logger.info(f"333단계 실행 시작 - 수량: {quantity}")
+                try:
+                    # Step3_3_3Core 동적 임포트
+                    from core.steps.step3_3_3_core import Step3_3_3Core
+                    
+                    driver = self.browser_manager.get_driver(browser_id)
+                    step_core = Step3_3_3Core(driver, step3_product_limit=step3_product_limit or 20, step3_image_limit=step3_image_limit)
+                    account_logger.info(f"Step3_3_3Core 인스턴스 생성 완료 (상품 제한: {step3_product_limit or 20}개)")
+                    
+                    # 계정 정보 가져오기 (가상 ID를 실제 이메일로 변환)
+                    real_account_id = get_real_account_id(account_id)
+                    account_info = self.account_manager.get_account(real_account_id)
+                    account_logger.info(f"계정 정보 획득: {account_info.get('id', 'N/A')} (원본 ID: {account_id}, 실제 ID: {real_account_id})")
+                    
+                    # Excel에서 작업 목록을 먼저 로드하여 provider_codes 추출
+                    from product_editor_core3 import ProductEditorCore3
+                    product_editor = ProductEditorCore3(driver, step3_image_limit=step3_image_limit)
+                    task_list = product_editor.load_task_list_from_excel_with_server_filter(
+                        account_id=real_account_id,
+                        step="step3",
+                        server_name="서버3-3"
+                    )
+                    
+                    # 설정된 이미지 번역 제한 로깅
+                    account_logger.info(f"이미지 번역 제한 설정: {step3_image_limit or 2000}개")
+                    
+                    # task_list에서 provider_codes 추출
+                    provider_codes = list(set([task['provider_code'] for task in task_list if task.get('provider_code')]))
+                    account_logger.info(f"추출된 provider_codes: {provider_codes}")
+                    
+                    if not provider_codes:
+                        account_logger.warning("처리할 provider_code가 없습니다")
+                        result['success'] = True  # 작업할 것이 없는 것은 성공으로 간주
+                        return result
+                    
+                    # 청크 사이즈에 따른 처리 방식 결정
+                    if len(provider_codes) > chunk_size:
+                        account_logger.info(f"브라우저 재시작 방식으로 311단계 실행 (키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size})")
+                        step_result = self._execute_step333_with_browser_restart(account_id, browser_id, provider_codes, chunk_size, account_info, step3_product_limit, step3_image_limit)
+                    else:
+                        account_logger.info(f"기존 방식으로 333단계 실행 (키워드 수: {len(provider_codes)})")
+                        # Step3_1_3Core 실행 (등록상품관리 화면 열기는 내부에서 처리)
+                        step_result = step_core.execute_step3_3_3(provider_codes, account_info)
+                    
+                    account_logger.info(f"Step3_3_3Core 실행 완료, 결과: {step_result}")
+                    
+                    result.update(step_result)
+                    if 'success' in step_result:
+                        result['success'] = step_result['success']
+                    account_logger.info(f"333단계 실행 완료 - 처리: {result.get('processed', 0)}, 실패: {result.get('failed', 0)}, 성공: {result.get('success', False)}")
+                except Exception as step_error:
+                    account_logger.error(f"Step3_3_3Core 실행 중 예외 발생: {step_error}")
+                    account_logger.error(f"Step3_3_3Core 예외 상세: {traceback.format_exc()}")
+                    raise
+                    
             else:
                 # 6단계는 향후 구현
                 raise NotImplementedError(f"{step}단계는 아직 구현되지 않았습니다.")
@@ -1481,6 +2298,15 @@ class BatchManager:
             account_logger.error(f"오류 메시지: {e}")
             account_logger.error(f"오류 상세: {traceback.format_exc()}")
             result['errors'].append(str(e))
+            
+            # 텔레그램 오류 알림
+            self._send_telegram_notification(
+                'error',
+                account_id=real_account_id,
+                step_name=f"Step {step}",
+                server_name="배치 서버",
+                error_message=str(e)
+            )
         
         finally:
             # 브라우저 정리
@@ -1490,6 +2316,20 @@ class BatchManager:
                     self.browser_manager.close_browser(browser_id)
             except Exception as cleanup_error:
                 account_logger.error(f"브라우저 정리 중 오류: {cleanup_error}")
+            
+            # 텔레그램 완료 알림 (성공/실패 여부에 관계없이)
+            end_time = datetime.now()
+            duration_minutes = (end_time - start_time).total_seconds() / 60
+            
+            if result.get('success', False):
+                self._send_telegram_notification(
+                    'complete',
+                    account_id=real_account_id,
+                    step_name=f"Step {step}",
+                    server_name="배치 서버",
+                    duration_minutes=duration_minutes
+                )
+            # 오류 알림은 except 블록에서 이미 전송됨
         
         account_logger.info(f"=== {step}단계 실행 완료 ===")
         return result
@@ -2318,7 +3158,7 @@ class BatchManager:
                 'status': 'not_found'
             }
     
-    def _execute_step31_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None) -> Dict:
+    def _execute_step31_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
         """
         브라우저 재시작 방식으로 31단계 실행
         
@@ -2373,7 +3213,7 @@ class BatchManager:
                     
                     # Step3_1Core 동적 임포트
                     from core.steps.step3_1_core import Step3_1Core
-                    step_core = Step3_1Core(driver)
+                    step_core = Step3_1Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
                     
                     chunk_result = step_core.execute_step3_1(chunk_provider_codes, account_info)
                     
@@ -2385,6 +3225,17 @@ class BatchManager:
                     total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
                     total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
                     total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
                     
                     account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
                     
@@ -2443,6 +3294,15 @@ class BatchManager:
             total_result['processed'] = total_result['processed_keywords']
             total_result['failed'] = total_result['failed_keywords']
             
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_1_core import Step3_1Core
+                    step_core = Step3_1Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "31단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"31단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
             account_logger.info(f"31단계 브라우저 재시작 방식 완료")
             account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
             account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
@@ -2456,267 +3316,1809 @@ class BatchManager:
             total_result['errors'].append(str(e))
             return total_result
     
-    def _execute_step32_with_browser_restart(self, account_id, browser_id, provider_codes, chunk_size, account_info):
-        """32단계를 청크 단위로 브라우저 재시작하며 실행"""
-        account_logger = self.account_loggers.get(account_id)
-        if not account_logger:
-            account_logger = AccountLogger(account_id, self.start_time)
-            self.account_loggers[account_id] = account_logger
+    def _save_chunk_progress(self, step_core, completed_keywords: List[str], total_products_processed: int, total_images_translated: int, account_info: Dict, account_logger, chunk_idx: int):
+        """
+        청크 완료 후 progress 파일 저장 공통 메서드
         
-        # 총 청크 수 계산
-        total_chunks = math.ceil(len(provider_codes) / chunk_size)
-        account_logger.info(f"총 {len(provider_codes)}개 키워드를 {total_chunks}개 청크로 분할하여 처리 (청크 크기: {chunk_size})")
-        
-        accumulated_result = {
-            'success': True,
-            'processed': 0,
-            'failed': 0,
-            'errors': []
-        }
-        
-        for chunk_index in range(total_chunks):
-            start_idx = chunk_index * chunk_size
-            end_idx = min(start_idx + chunk_size, len(provider_codes))
-            current_chunk = provider_codes[start_idx:end_idx]
+        Args:
+            step_core: Step Core 인스턴스
+            completed_keywords: 완료된 키워드 목록
+            total_products_processed: 총 처리된 상품 수
+            total_images_translated: 총 번역된 이미지 수
+            account_info: 계정 정보
+            account_logger: 계정 로거
+            chunk_idx: 청크 인덱스
+        """
+        try:
+            # progress_file 경로 생성
+            progress_file = step_core._get_progress_file_path(account_info)
             
-            account_logger.info(f"청크 {chunk_index + 1}/{total_chunks} 처리 시작 (키워드 {len(current_chunk)}개)")
-            
-            try:
-                # 브라우저 드라이버 가져오기
-                driver = self.browser_manager.get_driver(browser_id)
-                
-                # Step3_2Core 동적 임포트 및 실행
-                from core.steps.step3_2_core import Step3_2Core
-                step_core = Step3_2Core(driver)
-                
-                # 현재 청크 실행
-                chunk_result = step_core.execute_step3_2(current_chunk, account_info)
-                
-                # 결과 누적
-                if chunk_result.get('success', False):
-                    accumulated_result['processed'] += chunk_result.get('processed', 0)
-                    accumulated_result['failed'] += chunk_result.get('failed', 0)
-                else:
-                    accumulated_result['success'] = False
-                    if 'error' in chunk_result:
-                        accumulated_result['errors'].append(chunk_result['error'])
-                
-                account_logger.info(f"청크 {chunk_index + 1}/{total_chunks} 완료 - 처리: {chunk_result.get('processed', 0)}, 실패: {chunk_result.get('failed', 0)}")
-                
-                # 배치 분할 중단 플래그 확인
-                if hasattr(self, 'stop_batch_splitting') and self.stop_batch_splitting:
-                    account_logger.warning(f"배치 분할 중단 플래그가 설정되어 청크 {chunk_index + 1}에서 중단합니다")
-                    break
-                
-                # 마지막 청크가 아니면 브라우저 재시작
-                if chunk_index < total_chunks - 1:
-                    account_logger.info(f"청크 {chunk_index + 1} 완료 후 브라우저 재시작")
-                    
-                    # 기존 브라우저 종료
-                    try:
-                        self.browser_manager.close_browser(browser_id)
-                        account_logger.info(f"기존 브라우저 {browser_id} 종료 완료")
-                    except Exception as close_error:
-                        account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
-                    
-                    # 새 브라우저 생성
-                    import time
-                    time.sleep(3)  # 브라우저 종료 후 대기
-                    
-                    new_browser_id = f"{account_id}_browser_chunk_{chunk_index + 2}"
-                    browser_id = self.browser_manager.create_browser(
-                        browser_id=new_browser_id,
-                        headless=self.config.get('browser', {}).get('headless', False)
-                    )
-                    
-                    if not browser_id:
-                        raise Exception(f"청크 {chunk_index + 2}용 브라우저 생성 실패")
-                    
-                    account_logger.info(f"새 브라우저 생성 완료: {browser_id}")
-                    
-                    # 새 브라우저에서 로그인
-                    real_account_id = get_real_account_id(account_id)
-                    email, password = self.account_manager.get_account_credentials(real_account_id)
-                    
-                    login_success = self.browser_manager.login_browser(browser_id, email, password)
-                    if not login_success:
-                        raise Exception(f"청크 {chunk_index + 2}용 브라우저 로그인 실패")
-                    
-                    account_logger.info(f"새 브라우저 로그인 완료")
-                    time.sleep(2)  # 로그인 후 안정화 대기
-                    
-            except Exception as e:
-                account_logger.error(f"청크 {chunk_index + 1} 처리 중 오류: {e}")
-                accumulated_result['success'] = False
-                accumulated_result['errors'].append(str(e))
-                
-                # 오류 발생 시에도 브라우저 재시작 시도
-                if chunk_index < total_chunks - 1:
-                    try:
-                        # 기존 브라우저 종료
-                        self.browser_manager.close_browser(browser_id)
-                        account_logger.info(f"오류 후 기존 브라우저 {browser_id} 종료 완료")
-                        
-                        # 새 브라우저 생성
-                        import time
-                        time.sleep(3)  # 브라우저 종료 후 대기
-                        
-                        new_browser_id = f"{account_id}_browser_chunk_{chunk_index + 2}"
-                        browser_id = self.browser_manager.create_browser(
-                            browser_id=new_browser_id,
-                            headless=self.config.get('browser', {}).get('headless', False)
-                        )
-                        
-                        if browser_id:
-                            # 새 브라우저에서 로그인
-                            real_account_id = get_real_account_id(account_id)
-                            email, password = self.account_manager.get_account_credentials(real_account_id)
-                            
-                            login_success = self.browser_manager.login_browser(browser_id, email, password)
-                            if login_success:
-                                account_logger.info(f"오류 후 새 브라우저 로그인 완료")
-                                time.sleep(2)
-                            else:
-                                account_logger.error(f"오류 후 새 브라우저 로그인 실패")
-                        else:
-                            account_logger.error(f"오류 후 새 브라우저 생성 실패")
-                            
-                    except Exception as restart_error:
-                        account_logger.error(f"브라우저 재시작 실패: {restart_error}")
-        
-        account_logger.info(f"32단계 청크 처리 완료 - 총 처리: {accumulated_result['processed']}, 총 실패: {accumulated_result['failed']}")
-        return accumulated_result
+            step_core._save_progress(
+                completed_keywords=completed_keywords,
+                progress_file=progress_file,
+                account_info=account_info,
+                total_products_processed=total_products_processed,
+                total_images_translated=total_images_translated
+            )
+            account_logger.info(f"청크 {chunk_idx + 1} 완료 후 progress 파일 저장 완료: {progress_file}")
+        except Exception as save_error:
+            account_logger.warning(f"청크 {chunk_idx + 1} 완료 후 progress 파일 저장 실패: {save_error}")
     
-    def _execute_step33_with_browser_restart(self, account_id, browser_id, provider_codes, chunk_size, account_info):
-        """33단계를 청크 단위로 브라우저 재시작하며 실행"""
+    def _cleanup_progress_file(self, step_core, account_info: Dict, account_logger, step_name: str):
+        """
+        배치 작업 완료 후 progress 파일 정리 공통 메서드
+        
+        Args:
+            step_core: Step Core 인스턴스
+            account_info: 계정 정보
+            account_logger: 계정 로거
+            step_name: 단계 이름 (로그용)
+        """
+        try:
+            progress_file = step_core._get_progress_file_path(account_info)
+            if os.path.exists(progress_file):
+                # progress 파일을 삭제하지 않고 완료 상태로 마킹
+                try:
+                    with open(progress_file, 'r', encoding='utf-8') as f:
+                        progress_data = json.load(f)
+                    
+                    # 완료 상태 추가
+                    progress_data['batch_completed'] = True
+                    progress_data['completion_time'] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                    
+                    with open(progress_file, 'w', encoding='utf-8') as f:
+                        json.dump(progress_data, f, ensure_ascii=False, indent=2)
+                    
+                    account_logger.info(f"{step_name} 배치 작업 완료 - progress 파일에 완료 상태 기록: {progress_file}")
+                except Exception as mark_error:
+                    account_logger.warning(f"{step_name} progress 파일 완료 상태 마킹 실패: {mark_error}")
+                    # 마킹 실패 시에도 파일은 보존
+                    account_logger.info(f"{step_name} 배치 작업 완료 - progress 파일 보존됨: {progress_file}")
+            else:
+                account_logger.debug(f"{step_name} progress 파일이 존재하지 않음: {progress_file}")
+        except Exception as cleanup_error:
+            account_logger.warning(f"{step_name} progress 파일 처리 중 오류: {cleanup_error}")
+
+    def _execute_step311_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 311단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
         account_logger = self.account_loggers.get(account_id)
         if not account_logger:
             account_logger = AccountLogger(account_id, self.start_time)
             self.account_loggers[account_id] = account_logger
         
-        # 총 청크 수 계산
-        total_chunks = math.ceil(len(provider_codes) / chunk_size)
-        account_logger.info(f"총 {len(provider_codes)}개 키워드를 {total_chunks}개 청크로 분할하여 처리 (청크 크기: {chunk_size})")
-        
-        accumulated_result = {
-            'success': True,
-            'processed': 0,
-            'failed': 0,
-            'errors': []
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
         }
         
-        for chunk_index in range(total_chunks):
-            start_idx = chunk_index * chunk_size
-            end_idx = min(start_idx + chunk_size, len(provider_codes))
-            current_chunk = provider_codes[start_idx:end_idx]
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
             
-            account_logger.info(f"청크 {chunk_index + 1}/{total_chunks} 처리 시작 (키워드 {len(current_chunk)}개)")
+            account_logger.info(f"브라우저 재시작 방식으로 311단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
             
-            try:
-                # 브라우저 드라이버 가져오기
-                driver = self.browser_manager.get_driver(browser_id)
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
                 
-                # Step3_3Core 동적 임포트 및 실행
-                from core.steps.step3_3_core import Step3_3Core
-                step_core = Step3_3Core(driver)
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
                 
-                # 현재 청크 실행
-                chunk_result = step_core.execute_step3_3(current_chunk, account_info)
-                
-                # 결과 누적
-                if chunk_result.get('success', False):
-                    accumulated_result['processed'] += chunk_result.get('processed', 0)
-                    accumulated_result['failed'] += chunk_result.get('failed', 0)
-                else:
-                    accumulated_result['success'] = False
-                    if 'error' in chunk_result:
-                        accumulated_result['errors'].append(chunk_result['error'])
-                
-                account_logger.info(f"청크 {chunk_index + 1}/{total_chunks} 완료 - 처리: {chunk_result.get('processed', 0)}, 실패: {chunk_result.get('failed', 0)}")
-                
-                # 배치 분할 중단 플래그 확인
-                if hasattr(self, 'stop_batch_splitting') and self.stop_batch_splitting:
-                    account_logger.warning(f"배치 분할 중단 플래그가 설정되어 청크 {chunk_index + 1}에서 중단합니다")
-                    break
-                
-                # 마지막 청크가 아니면 브라우저 재시작
-                if chunk_index < total_chunks - 1:
-                    account_logger.info(f"청크 {chunk_index + 1} 완료 후 브라우저 재시작")
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
                     
-                    # 기존 브라우저 종료
-                    try:
-                        self.browser_manager.close_browser(browser_id)
-                        account_logger.info(f"기존 브라우저 {browser_id} 종료 완료")
-                    except Exception as close_error:
-                        account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                    # Step3_1_1Core 동적 임포트
+                    from core.steps.step3_1_1_core import Step3_1_1Core
+                    step_core = Step3_1_1Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
                     
-                    # 새 브라우저 생성
-                    import time
-                    time.sleep(3)  # 브라우저 종료 후 대기
+                    chunk_result = step_core.execute_step3_1_1(chunk_provider_codes, account_info)
                     
-                    new_browser_id = f"{account_id}_browser_chunk_{chunk_index + 2}"
-                    browser_id = self.browser_manager.create_browser(
-                        browser_id=new_browser_id,
-                        headless=self.config.get('browser', {}).get('headless', False)
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
                     )
                     
-                    if not browser_id:
-                        raise Exception(f"청크 {chunk_index + 2}용 브라우저 생성 실패")
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
                     
-                    account_logger.info(f"새 브라우저 생성 완료: {browser_id}")
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
                     
-                    # 새 브라우저에서 로그인
-                    real_account_id = get_real_account_id(account_id)
-                    email, password = self.account_manager.get_account_credentials(real_account_id)
-                    
-                    login_success = self.browser_manager.login_browser(browser_id, email, password)
-                    if not login_success:
-                        raise Exception(f"청크 {chunk_index + 2}용 브라우저 로그인 실패")
-                    
-                    account_logger.info(f"새 브라우저 로그인 완료")
-                    time.sleep(2)  # 로그인 후 안정화 대기
-                    
-            except Exception as e:
-                account_logger.error(f"청크 {chunk_index + 1} 처리 중 오류: {e}")
-                accumulated_result['success'] = False
-                accumulated_result['errors'].append(str(e))
-                
-                # 오류 발생 시에도 브라우저 재시작 시도
-                if chunk_index < total_chunks - 1:
-                    try:
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
                         # 기존 브라우저 종료
-                        self.browser_manager.close_browser(browser_id)
-                        account_logger.info(f"오류 후 기존 브라우저 {browser_id} 종료 완료")
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
                         
                         # 새 브라우저 생성
                         import time
                         time.sleep(3)  # 브라우저 종료 후 대기
                         
-                        new_browser_id = f"{account_id}_browser_chunk_{chunk_index + 2}"
-                        browser_id = self.browser_manager.create_browser(
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
                             browser_id=new_browser_id,
                             headless=self.config.get('browser', {}).get('headless', False)
                         )
                         
-                        if browser_id:
-                            # 새 브라우저에서 로그인
-                            real_account_id = get_real_account_id(account_id)
-                            email, password = self.account_manager.get_account_credentials(real_account_id)
-                            
-                            login_success = self.browser_manager.login_browser(browser_id, email, password)
-                            if login_success:
-                                account_logger.info(f"오류 후 새 브라우저 로그인 완료")
-                                time.sleep(2)
-                            else:
-                                account_logger.error(f"오류 후 새 브라우저 로그인 실패")
-                        else:
-                            account_logger.error(f"오류 후 새 브라우저 생성 실패")
-                            
-                    except Exception as restart_error:
-                        account_logger.error(f"브라우저 재시작 실패: {restart_error}")
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_1_1_core import Step3_1_1Core
+                    step_core = Step3_1_1Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "311단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"311단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"311단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"311단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
+
+    def _execute_step312_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 312단계 실행
         
-        account_logger.info(f"33단계 청크 처리 완료 - 총 처리: {accumulated_result['processed']}, 총 실패: {accumulated_result['failed']}")
-        return accumulated_result
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 312단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_1_2Core 동적 임포트
+                    from core.steps.step3_1_2_core import Step3_1_2Core
+                    step_core = Step3_1_2Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_1_2(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_1_2_core import Step3_1_2Core
+                    step_core = Step3_1_2Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "312단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"312단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"312단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"312단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
+
+    def _execute_step313_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 313단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 313단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_1_3Core 동적 임포트
+                    from core.steps.step3_1_3_core import Step3_1_3Core
+                    step_core = Step3_1_3Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_1_3(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_1_3_core import Step3_1_3Core
+                    step_core = Step3_1_3Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "313단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"313단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"313단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"313단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
+
+    def _execute_step32_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 32단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 32단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_2Core 동적 임포트
+                    from core.steps.step3_2_core import Step3_2Core
+                    step_core = Step3_2Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_2(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_2_core import Step3_2Core
+                    step_core = Step3_2Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "313단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"32단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"32단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"32단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result
+
+    def _execute_step321_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 321단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 321단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_2_1Core 동적 임포트
+                    from core.steps.step3_2_1_core import Step3_2_1Core
+                    step_core = Step3_2_1Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_2_1(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_2_1_core import Step3_2_1Core
+                    step_core = Step3_2_1Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "321단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"321단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"321단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"321단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
+    
+    def _execute_step322_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 321단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 322단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_2_2Core 동적 임포트
+                    from core.steps.step3_2_2_core import Step3_2_2Core
+                    step_core = Step3_2_2Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_2_2(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_2_2_core import Step3_2_2Core
+                    step_core = Step3_2_2Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "322단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"322단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"322단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"322단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
+
+    def _execute_step323_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 321단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 323단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_2_3Core 동적 임포트
+                    from core.steps.step3_2_3_core import Step3_2_3Core
+                    step_core = Step3_2_3Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_2_3(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_2_3_core import Step3_2_3Core
+                    step_core = Step3_2_3Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "323단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"323단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"323단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"323단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result                    
+
+    
+    def _execute_step33_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 33단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 33단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_3Core 동적 임포트
+                    from core.steps.step3_3_core import Step3_3Core
+                    step_core = Step3_3Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_3(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                                        
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_3_core import Step3_3Core
+                    step_core = Step3_3Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "33단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"33단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"33단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"33단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result
+    
+    
+    def _execute_step331_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 331단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 331단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_3_1Core 동적 임포트
+                    from core.steps.step3_3_1_core import Step3_3_1Core
+                    step_core = Step3_3_1Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_3_1(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_3_1_core import Step3_3_1Core
+                    step_core = Step3_3_1Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "331단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"331단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"331단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"331단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
+    
+    def _execute_step332_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 332단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 332단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_3_2Core 동적 임포트
+                    from core.steps.step3_3_2_core import Step3_3_2Core
+                    step_core = Step3_3_2Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_3_2(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_3_2_core import Step3_3_2Core
+                    step_core = Step3_3_2Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "332단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"332단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"332단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"332단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
+
+
+    def _execute_step333_with_browser_restart(self, account_id: str, initial_browser_id: str, provider_codes: List[str], chunk_size: int = 2, account_info: Dict = None, step3_product_limit: int = None, step3_image_limit: int = None) -> Dict:
+        """
+        브라우저 재시작 방식으로 333단계 실행
+        
+        Args:
+            account_id: 계정 ID
+            initial_browser_id: 초기 브라우저 ID
+            provider_codes: 처리할 키워드(provider_code) 목록
+            chunk_size: 청크 크기 (기본값: 2)
+            account_info: 계정 정보
+            
+        Returns:
+            Dict: 실행 결과
+        """
+        account_logger = self.account_loggers.get(account_id)
+        if not account_logger:
+            account_logger = AccountLogger(account_id, self.start_time)
+            self.account_loggers[account_id] = account_logger
+        
+        total_result = {
+            'success': False,
+            'processed_keywords': 0,
+            'failed_keywords': 0,
+            'total_products_processed': 0,
+            'errors': [],
+            'completed_keywords': [],
+            'failed_keywords_list': [],
+            'chunks_completed': 0,
+            'total_chunks': 0
+        }
+        
+        try:
+            # 총 청크 수 계산
+            total_chunks = (len(provider_codes) + chunk_size - 1) // chunk_size
+            total_result['total_chunks'] = total_chunks
+            
+            account_logger.info(f"브라우저 재시작 방식으로 333단계 작업 시작")
+            account_logger.info(f"총 키워드 수: {len(provider_codes)}, 청크 크기: {chunk_size}, 총 청크 수: {total_chunks}")
+            
+            current_browser_id = initial_browser_id
+            
+            for chunk_idx in range(total_chunks):
+                start_idx = chunk_idx * chunk_size
+                end_idx = min(start_idx + chunk_size, len(provider_codes))
+                chunk_provider_codes = provider_codes[start_idx:end_idx]
+                
+                account_logger.info(f"===== 청크 {chunk_idx + 1}/{total_chunks} 시작 (키워드 {start_idx + 1}-{end_idx}) =====")
+                account_logger.info(f"처리할 키워드: {chunk_provider_codes}")
+                
+                try:
+                    # 현재 청크 실행
+                    driver = self.browser_manager.get_driver(current_browser_id)
+                    
+                    # Step3_3_3Core 동적 임포트
+                    from core.steps.step3_3_3_core import Step3_3_3Core
+                    step_core = Step3_3_3Core(driver, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    
+                    chunk_result = step_core.execute_step3_3_3(chunk_provider_codes, account_info)
+                    
+                    # 결과 누적
+                    total_result['processed_keywords'] += chunk_result.get('processed_keywords', 0)
+                    total_result['failed_keywords'] += chunk_result.get('failed_keywords', 0)
+                    total_result['total_products_processed'] += chunk_result.get('total_products_processed', 0)
+                    total_result['errors'].extend(chunk_result.get('errors', []))
+                    total_result['completed_keywords'].extend(chunk_result.get('completed_keywords', []))
+                    total_result['failed_keywords_list'].extend(chunk_result.get('failed_keywords_list', []))
+                    total_result['chunks_completed'] += 1
+                    
+                    # 청크 완료 후 progress 파일 저장
+                    self._save_chunk_progress(
+                        step_core=step_core,
+                        completed_keywords=total_result['completed_keywords'],
+                        total_products_processed=total_result['total_products_processed'],
+                        total_images_translated=chunk_result.get('total_images_translated', 0),
+                        account_info=account_info,
+                        account_logger=account_logger,
+                        chunk_idx=chunk_idx
+                    )
+                    
+                    account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 키워드 {chunk_result.get('processed_keywords', 0)}개, 실패 키워드 {chunk_result.get('failed_keywords', 0)}개")
+                    
+                    # 배치분할 중단 플래그 확인
+                    if chunk_result.get('should_stop_batch', False):
+                        account_logger.warning(f"청크 {chunk_idx + 1}에서 배치분할 중단 플래그 감지 - 후속 청크 처리를 중단합니다")
+                        break
+                    
+                    # 마지막 청크가 아니면 브라우저 재시작
+                    if chunk_idx < total_chunks - 1:
+                        account_logger.info(f"청크 {chunk_idx + 1} 완료 후 브라우저 재시작")
+                        
+                        # 기존 브라우저 종료
+                        try:
+                            self.browser_manager.close_browser(current_browser_id)
+                            account_logger.info(f"기존 브라우저 {current_browser_id} 종료 완료")
+                        except Exception as close_error:
+                            account_logger.warning(f"기존 브라우저 종료 중 오류: {close_error}")
+                        
+                        # 새 브라우저 생성
+                        import time
+                        time.sleep(3)  # 브라우저 종료 후 대기
+                        
+                        new_browser_id = f"{account_id}_browser_chunk_{chunk_idx + 2}"
+                        current_browser_id = self.browser_manager.create_browser(
+                            browser_id=new_browser_id,
+                            headless=self.config.get('browser', {}).get('headless', False)
+                        )
+                        
+                        if not current_browser_id:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 생성 실패")
+                        
+                        account_logger.info(f"새 브라우저 생성 완료: {current_browser_id}")
+                        
+                        # 새 브라우저에서 로그인
+                        real_account_id = get_real_account_id(account_id)
+                        email, password = self.account_manager.get_account_credentials(real_account_id)
+                        
+                        login_success = self.browser_manager.login_browser(current_browser_id, email, password)
+                        if not login_success:
+                            raise Exception(f"청크 {chunk_idx + 2}용 브라우저 로그인 실패")
+                        
+                        account_logger.info(f"새 브라우저 로그인 완료")
+                        time.sleep(2)  # 로그인 후 안정화 대기
+                
+                except Exception as chunk_error:
+                    account_logger.error(f"청크 {chunk_idx + 1} 실행 중 오류: {chunk_error}")
+                    total_result['errors'].append(f"청크 {chunk_idx + 1}: {str(chunk_error)}")
+                    # 청크 실패 시에도 다음 청크 계속 진행
+                    continue
+            
+            # 전체 성공 여부 결정
+            total_result['success'] = total_result['chunks_completed'] > 0
+            
+            # 결과 매핑 (기존 Step3_1Core 결과 형식에 맞춤)
+            total_result['processed'] = total_result['processed_keywords']
+            total_result['failed'] = total_result['failed_keywords']
+            
+            # 배치 작업 완료 후 progress 파일 정리
+            if total_result['chunks_completed'] > 0:
+                try:
+                    from core.steps.step3_3_3_core import Step3_3_3Core
+                    step_core = Step3_3_3Core(None, step3_product_limit=step3_product_limit, step3_image_limit=step3_image_limit)
+                    self._cleanup_progress_file(step_core, account_info, account_logger, "332단계")
+                except Exception as cleanup_error:
+                    account_logger.warning(f"333단계 progress 파일 정리 중 오류: {cleanup_error}")
+            
+            account_logger.info(f"333단계 브라우저 재시작 방식 완료")
+            account_logger.info(f"총 처리 키워드: {total_result['processed_keywords']}개")
+            account_logger.info(f"총 실패 키워드: {total_result['failed_keywords']}개")
+            account_logger.info(f"완료된 청크: {total_result['chunks_completed']}/{total_result['total_chunks']}개")
+            
+            return total_result
+            
+        except Exception as e:
+            account_logger.error(f"333단계 브라우저 재시작 방식 실행 중 오류: {e}")
+            total_result['success'] = False
+            total_result['errors'].append(str(e))
+            return total_result    
     
     def _execute_step21_with_browser_restart(self, account_id, browser_id, provider_codes, chunk_size, account_info):
         """21단계를 청크 단위로 브라우저 재시작하며 실행"""

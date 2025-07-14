@@ -506,6 +506,7 @@ class UploadUtils:
     def click_modal_upload_button(self) -> bool:
         """
         모달창 내 '선택 상품 일괄 업로드' 버튼 클릭
+        업로드 전에 마켓 체크박스가 1개 이상 선택되어 있는지 확인
         
         Returns:
             bool: 성공 여부
@@ -513,7 +514,12 @@ class UploadUtils:
         try:
             logger.info("모달 업로드 버튼 클릭 시도")
             
-            # 모달 내 업로드 버튼 선택자들 (XPath 우선 사용)
+            # 1. 마켓 체크박스 상태 확인
+            if not self._check_market_checkboxes():
+                logger.warning("선택된 마켓이 없어 업로드를 스킵합니다")
+                return False
+            
+            # 2. 모달 내 업로드 버튼 선택자들 (XPath 우선 사용)
             selectors = [
                 "//div[contains(@class, 'ant-modal-content')]//button[.//span[text()='선택 상품 일괄 업로드']]",
                 "//button[.//span[text()='선택 상품 일괄 업로드']]",
@@ -550,6 +556,42 @@ class UploadUtils:
             logger.error(f"모달 업로드 버튼 클릭 중 오류: {e}")
             return False
     
+    def _check_market_checkboxes(self) -> bool:
+        """
+        마켓 체크박스가 1개 이상 선택되어 있는지 확인
+        
+        Returns:
+            bool: 1개 이상 선택되어 있으면 True, 아니면 False
+        """
+        try:
+            logger.info("마켓 체크박스 상태 확인 시작")
+            
+            # 체크된 마켓 체크박스 선택자
+            checked_checkbox_selector = "//label[contains(@class, 'ant-checkbox-wrapper-checked')]"
+            
+            # 체크된 체크박스 찾기
+            checked_checkboxes = self.driver.find_elements(By.XPATH, checked_checkbox_selector)
+            
+            if len(checked_checkboxes) > 0:
+                logger.info(f"선택된 마켓 수: {len(checked_checkboxes)}개")
+                
+                # 선택된 마켓 이름 로깅
+                for checkbox in checked_checkboxes:
+                    try:
+                        market_name = checkbox.find_element(By.XPATH, ".//span[last()]").text
+                        logger.info(f"선택된 마켓: {market_name}")
+                    except Exception:
+                        pass
+                
+                return True
+            else:
+                logger.warning("선택된 마켓이 없습니다. 업로드를 진행할 수 없습니다.")
+                return False
+                
+        except Exception as e:
+            logger.error(f"마켓 체크박스 상태 확인 중 오류: {e}")
+            return False
+    
     def _handle_upload_confirmation_modal(self) -> bool:
         """
         업로드 완료를 동적으로 감시하고 모달창 닫기
@@ -561,9 +603,9 @@ class UploadUtils:
         try:
             logger.info("업로드 완료 대기 시작")
             
-            # 업로드 완료 상태 체크 (최대 20분 대기)
-            max_wait_time = 1200  # 20분간
-            check_interval = 3   # 3초마다 체크
+            # 업로드 완료 상태 체크 (최대 30분 대기)
+            max_wait_time = 1800  # 30분간
+            check_interval = 5   # 3초마다 체크
             elapsed_time = 0
             
             while elapsed_time < max_wait_time:

@@ -273,35 +273,20 @@ class Step6_3Core:
                 logger.warning(f"계정 {account_id}에 대한 마켓 설정이 없습니다")
                 return 0
             
-            processed_count = 0
+            # execute_dynamic_upload_workflow는 이미 모든 마켓 설정을 순차적으로 처리함
+            # 따라서 한 번만 호출하면 됨
+            logger.info(f"계정 {account_id}의 동적 업로드 워크플로우 시작 (카페24 업로드)")
             
-            # 각 마켓 설정에 대해 처리
-            for config in market_configs:
-                try:
-                    # 그룹명 확인
-                    group_name = config.get('groupname', '')
-                    if not group_name:
-                        logger.warning("그룹명이 없는 설정을 건너뜁니다")
-                        continue
-                    
-                    logger.info(f"그룹 '{group_name}' 처리 시작 (카페24 업로드)")
-                    
-                    # 동적 업로드 처리 실행
-                    result = core_processor.execute_dynamic_upload_workflow()
-                    
-                    if result.get('success', False):
-                        processed_count += result.get('processed_count', 0)
-                        logger.info(f"그룹 '{group_name}' 처리 완료: {result.get('processed_count', 0)}개")
-                    else:
-                        logger.error(f"그룹 '{group_name}' 처리 실패: {result.get('error_message', '')}")
-                    
-                    # 다음 그룹 처리 전 대기
-                    delay_time = self.delay.get_delay('medium')
-                    time.sleep(delay_time)
-                    
-                except Exception as e:
-                    logger.error(f"그룹 처리 중 오류: {e}")
-                    continue
+            # 동적 업로드 처리 실행 (모든 마켓 설정을 내부에서 처리)
+            result = core_processor.execute_dynamic_upload_workflow()
+            
+            # execute_dynamic_upload_workflow는 boolean 값을 반환함
+            if result:
+                processed_count = len(market_configs)  # 성공 시 전체 마켓 설정 수 반환
+                logger.info(f"동적 업로드 워크플로우 완료 - 처리된 마켓 설정 수: {processed_count}")
+            else:
+                processed_count = 0
+                logger.error("동적 업로드 워크플로우 실패")
             
             return processed_count
             
