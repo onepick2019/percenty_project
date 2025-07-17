@@ -282,31 +282,54 @@ class ProductEditorCore:
                 logger.error("메모 텍스트 영역 클릭 실패")
                 return False
                 
-            # 7. 메모 내용 가져오기 및 복사
-            logger.info("7. 메모 내용 가져오기 및 복사")
+            # 7. 메모 내용 가져오기 및 수정 (멀티브라우저 간섭 방지)
+            logger.info("7. 메모 내용 가져오기 및 수정 (클립보드 사용 안함)")
             try:
-                # 키보드 단축키 모듈 초기화
-                # 전체 선택 (Ctrl+A)
-                self.keyboard.select_all()
-                # 복사 (Ctrl+C)
-                self.keyboard.copy()
-                
-                # Selenium으로 메모 내용 직접 가져오기 (pyperclip 대신)
+                # Selenium으로 메모 내용 직접 가져오기 (클립보드 사용 안함)
                 try:
-                    # 현재 포커스된 요소에서 텍스트 직접 가져오기
-                    active_element = self.driver.switch_to.active_element
-                    self.original_memo = active_element.get_attribute('value') or ''
+                    # textarea 요소 직접 찾기
+                    textarea_selector = UI_ELEMENTS["PRODUCT_MEMO_TEXTAREA"]["dom_selector"]
+                    textarea_element = self.driver.find_element(By.XPATH, textarea_selector)
+                    
+                    # 현재 textarea의 내용 직접 가져오기
+                    self.original_memo = textarea_element.get_attribute('value') or ''
                     self.original_memo = self.original_memo.strip()
+                    logger.info(f"원본 메모 내용: {self.original_memo}")
+                    
+                    # 수정된 메모 내용 생성
+                    modified_memo = f"{self.original_memo}-S"
+                    
+                    # JavaScript를 사용하여 직접 값 설정 (클립보드 사용 안함)
+                    self.driver.execute_script(
+                        "arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
+                        textarea_element, modified_memo
+                    )
+                    logger.info(f"수정된 메모 내용 입력 완료: {modified_memo}")
+                    
+                    # 브라우저별 메모 저장 (다음 단계에서 사용)
+                    self.original_memo_text = self.original_memo
+                    
                 except Exception as e:
-                    logger.warning(f"Selenium으로 메모 내용 가져오기 실패, 빈 문자열 사용: {e}")
-                    self.original_memo = ''
-                logger.info(f"원본 메모 내용: {self.original_memo}")
-                
-                # 다시 전체 선택 후 메모 내용 수정 (접미사 -S 추가)
-                self.keyboard.select_all()
-                modified_memo = f"{self.original_memo}-S"
-                self.keyboard.type_text(modified_memo)
-                logger.info(f"수정된 메모 내용 입력 완료: {modified_memo}")
+                    logger.warning(f"Selenium으로 메모 내용 처리 실패: {e}")
+                    # 폴백: 현재 포커스된 요소에서 가져오기
+                    try:
+                        active_element = self.driver.switch_to.active_element
+                        self.original_memo = active_element.get_attribute('value') or ''
+                        self.original_memo = self.original_memo.strip()
+                        modified_memo = f"{self.original_memo}-S"
+                        
+                        # JavaScript로 값 설정
+                        self.driver.execute_script(
+                            "arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
+                            active_element, modified_memo
+                        )
+                        self.original_memo_text = self.original_memo
+                        logger.info(f"폴백 방식으로 메모 처리 완료: {modified_memo}")
+                    except Exception as fallback_e:
+                        logger.error(f"폴백 방식도 실패: {fallback_e}")
+                        self.original_memo = ''
+                        self.original_memo_text = ''
+                        return False
                 
             except Exception as e:
                 logger.error(f"메모 내용 처리 중 오류: {e}")
@@ -466,33 +489,41 @@ class ProductEditorCore:
             logger.info("11.  HTML 삽입 TEXTAREA 클릭")
             smart_click(self.driver, UI_ELEMENTS["PRODUCT_HTMLSOURCE_TEXTAREA"], DELAY_VERY_SHORT5)
 
-            # 12.  상품메모 복사한 original 을 붙여넣기
-            logger.info("12. 상품메모 원본 내용 붙여넣기")
+            # 12. 상품메모 원본 내용 HTML 삽입 (멀티브라우저 간섭 방지)
+            logger.info("12. 상품메모 원본 내용 HTML 삽입 (클립보드 사용 안함)")
             try:
-                # 키보드 단축키 클래스 초기화 (멀티브라우저 간섭 방지)
-                keyboard = KeyboardShortcuts(self.driver, use_selenium=True)
-                
                 # HTML 삽입 textarea 요소 찾기
                 textarea_selector = UI_ELEMENTS["PRODUCT_HTMLSOURCE_TEXTAREA"]["dom_selector"]
                 textarea_element = self.driver.find_element(By.XPATH, textarea_selector)
                 
-                # 텍스트 영역 클릭 후 전체 선택 (현재 내용을 지우기 위해)
-                textarea_element.click()
-                keyboard.select_all(delay=DELAY_VERY_SHORT2)  # 전체 선택
-                
-                # 클립보드에 저장된 원본 메모 붙여넣기
-                keyboard.paste(delay=DELAY_VERY_SHORT2)
-                logger.info(f"원본 메모 붙여넣기 완료: '{self.original_memo_text}'")
-            except Exception as e:
-                logger.warning(f"HTML 삽입 영역에 메모 붙여넣기 실패: {e}")
+                # 원본 메모 내용이 있는지 확인
                 if hasattr(self, 'original_memo_text') and self.original_memo_text:
-                    # 오류 발생 시 직접 텍스트 입력 시도
-                    try:
-                        textarea_element.clear()
+                    # JavaScript를 사용하여 직접 값 설정 (클립보드 사용 안함)
+                    self.driver.execute_script(
+                        "arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
+                        textarea_element, self.original_memo_text
+                    )
+                    logger.info(f"원본 메모 HTML 삽입 완료: '{self.original_memo_text}'")
+                else:
+                    logger.warning("원본 메모 내용이 없어 빈 값으로 설정")
+                    self.driver.execute_script(
+                        "arguments[0].value = ''; arguments[0].dispatchEvent(new Event('input', { bubbles: true }));",
+                        textarea_element
+                    )
+                    
+            except Exception as e:
+                logger.error(f"HTML 삽입 영역에 메모 설정 실패: {e}")
+                # 폴백: Selenium 기본 방식 시도
+                try:
+                    textarea_element = self.driver.find_element(By.XPATH, UI_ELEMENTS["PRODUCT_HTMLSOURCE_TEXTAREA"]["dom_selector"])
+                    textarea_element.clear()
+                    if hasattr(self, 'original_memo_text') and self.original_memo_text:
                         textarea_element.send_keys(self.original_memo_text)
-                        logger.info(f"직접 입력 방식으로 원본 메모 입력 완료")
-                    except Exception as sub_e:
-                        logger.error(f"직접 입력 방식도 실패: {sub_e}")
+                        logger.info("폴백 방식으로 원본 메모 입력 완료")
+                    else:
+                        logger.warning("폴백 방식: 원본 메모 내용이 없음")
+                except Exception as fallback_e:
+                    logger.error(f"폴백 방식도 실패: {fallback_e}")
             
             # 13.  HTML 삽입 저장 버튼 클릭 (좌표만 사용)
             logger.info("13.  HTML 삽입 저장 버튼 클릭")
@@ -751,14 +782,14 @@ class ProductEditorCore:
                     # 여기서 추가 입력 작업을 하지 않고 바로 19번으로 넘어감 (사용자 요청에 따름)
                     # 18번 탭 클릭이 입력 확정 역할을 함
                 except Exception as e:
-                    logger.warning(f"메모 붙여넣기 오류: {e}")
-                    # 오류 발생 시 백업 방식
+                    logger.warning(f"메모 입력 오류: {e}")
+                    # 오류 발생 시 백업 방식 - 클립보드 사용하지 않는 안전한 방법
                     try:
-                        # Selenium으로 안전한 텍스트 입력 (pyautogui 대신)
+                        # Selenium으로 안전한 텍스트 입력
                         active_element = self.driver.switch_to.active_element
                         active_element.clear()
-                        active_element.send_keys(modified_memo)
-                        logger.info("Selenium으로 메모 입력 완료")
+                        active_element.send_keys(memo_text)  # modified_memo -> memo_text로 수정
+                        logger.info(f"Selenium 백업 방식으로 메모 입력 완료: '{memo_text}'")
                     except Exception as backup_error:
                         logger.error(f"Selenium 백업 방법도 실패: {backup_error}")
             else:

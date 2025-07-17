@@ -234,11 +234,16 @@ class PercentyImageManager3:
                 count_text = count_element.text.strip()
                 logger.info(f"이미지 개수 텍스트: '{count_text}'")
                 
-                # 숫자 추출 (예: "총 13개의 이미지" -> 13)
-                numbers = re.findall(r'\d+', count_text)
-                if numbers:
-                    total_count = int(numbers[0])
-                    logger.info(f"총 이미지 개수 파악 성공: {total_count}개")
+                # 숫자 추출 (예: "총 13개의 이미지" -> 13, "총 1,234개의 이미지" -> 1234)
+                # 콤마가 포함된 숫자 추출 (예: "4,253" -> 4253)
+                import re
+                # 콤마를 포함한 연속된 숫자 패턴 찾기
+                number_match = re.search(r'[\d,]+', count_text)
+                if number_match:
+                    # 콤마 제거 후 정수로 변환
+                    number_str = number_match.group().replace(',', '')
+                    total_count = int(number_str)
+                    logger.info(f"총 이미지 개수 파악 성공: {total_count}개 (원본: '{count_text}')")
                     return total_count
                 else:
                     logger.warning(f"이미지 개수 텍스트에서 숫자를 찾을 수 없습니다: '{count_text}'")

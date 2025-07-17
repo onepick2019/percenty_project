@@ -962,18 +962,20 @@ class PercentyDropdown:
             
             # 첫번째 상품의 체크박스 선택자들 (Select all 체크박스 제외)
             selectors = [
-                # 기본 테이블 구조의 첫번째 행 체크박스
-                "//tbody[contains(@class, 'ant-table-tbody')]//tr[1]//input[@type='checkbox']",
-                # 더 포괄적인 첫번째 행 체크박스
-                "//tr[contains(@class, 'ant-table-row')][1]//input[@type='checkbox']",
-                # 체크박스 래퍼를 통한 선택
-                "//tbody//tr[1]//span[contains(@class, 'ant-checkbox')]//input",
-                # 선택 컬럼의 첫번째 체크박스
-                "//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox']",
-                # 가장 포괄적인 선택자
-                "(//input[@type='checkbox'])[2]",  # 첫번째는 보통 Select All이므로 두번째
-                # 대체 선택자
-                "//div[contains(@class, 'ant-table-body')]//tr[1]//input[@type='checkbox']"
+                # 개별 상품 체크박스: td 태그 내부의 체크박스 (th 태그의 전체선택 제외)
+                "//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox'][1]",
+                # tbody 내 첫번째 행의 체크박스 (더 명확한 구분)
+                "//tbody[contains(@class, 'ant-table-tbody')]//tr[1]//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox']",
+                # 첫번째 데이터 행의 체크박스 (aria-label이 없는 것)
+                "//tr[contains(@class, 'ant-table-row')][1]//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox']",
+                # Select All이 아닌 첫번째 체크박스 (aria-label="Select all" 제외)
+                "//input[@type='checkbox'][not(@aria-label='Select all')][1]",
+                # td 태그 내부의 체크박스 래퍼를 통한 선택
+                "//td[contains(@class, 'ant-table-selection-column')]//span[contains(@class, 'ant-checkbox')]//input[@type='checkbox'][1]",
+                # 테이블 바디 내 첫번째 체크박스
+                "//div[contains(@class, 'ant-table-body')]//tr[1]//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox']",
+                # 가장 포괄적인 선택자 (전체선택 다음의 첫번째)
+                "(//td[contains(@class, 'ant-table-selection-column')]//input[@type='checkbox'])[1]"
             ]
             
             checkbox_element = None
@@ -985,28 +987,75 @@ class PercentyDropdown:
                     checkbox_element = WebDriverWait(self.driver, 2).until(
                         EC.presence_of_element_located((By.XPATH, selector))
                     )
+                    
+                    # 전체선택 체크박스가 아닌지 확인
+                    aria_label = checkbox_element.get_attribute("aria-label")
+                    if aria_label and "select all" in aria_label.lower():
+                        logger.debug(f"선택자 {i+1}: 전체선택 체크박스이므로 건너뜀")
+                        continue
+                    
+                    # 부모 요소가 th 태그인지 확인 (전체선택은 th 내부에 있음)
+                    parent_th = checkbox_element.find_element(By.XPATH, "./ancestor::th")
+                    if parent_th:
+                        logger.debug(f"선택자 {i+1}: th 태그 내부의 체크박스이므로 건너뜀 (전체선택)")
+                        continue
+                        
+                except NoSuchElementException:
+                    # th 태그가 없다면 개별 상품 체크박스일 가능성이 높음
+                    pass
+                except (TimeoutException, NoSuchElementException) as e:
+                    logger.debug(f"선택자 {i+1} 실패: {e}")
+                    continue
+                
+                try:
                     # 요소가 클릭 가능한지 확인
                     WebDriverWait(self.driver, 2).until(
                         EC.element_to_be_clickable((By.XPATH, selector))
                     )
                     successful_selector = selector
-                    logger.info(f"체크박스 요소 발견 (선택자 {i+1}): {selector}")
+                    logger.info(f"개별 상품 체크박스 요소 발견 (선택자 {i+1}): {selector}")
                     break
                 except (TimeoutException, NoSuchElementException) as e:
-                    logger.debug(f"선택자 {i+1} 실패: {e}")
+                    logger.debug(f"선택자 {i+1} 클릭 가능성 확인 실패: {e}")
+                    checkbox_element = None
                     continue
                     
             if not checkbox_element:
                 logger.error("모든 선택자로 첫번째 상품의 체크박스를 찾을 수 없습니다.")
-                # 페이지의 모든 체크박스 요소 확인
+                # 페이지의 모든 체크박스 요소 확인 및 분류
                 try:
                     all_checkboxes = self.driver.find_elements(By.XPATH, "//input[@type='checkbox']")
                     logger.info(f"페이지에서 발견된 총 체크박스 수: {len(all_checkboxes)}")
-                    for i, cb in enumerate(all_checkboxes[:5]):  # 처음 5개만 로깅
+                    
+                    select_all_count = 0
+                    individual_count = 0
+                    
+                    for i, cb in enumerate(all_checkboxes[:10]):  # 처음 10개만 로깅
                         try:
-                            logger.info(f"체크박스 {i+1}: visible={cb.is_displayed()}, enabled={cb.is_enabled()}")
-                        except:
-                            logger.info(f"체크박스 {i+1}: 정보 확인 불가")
+                            aria_label = cb.get_attribute("aria-label")
+                            is_visible = cb.is_displayed()
+                            is_enabled = cb.is_enabled()
+                            
+                            # 전체선택 체크박스인지 확인
+                            is_select_all = False
+                            try:
+                                parent_th = cb.find_element(By.XPATH, "./ancestor::th")
+                                is_select_all = True
+                                select_all_count += 1
+                            except NoSuchElementException:
+                                individual_count += 1
+                            
+                            if aria_label and "select all" in aria_label.lower():
+                                is_select_all = True
+                                
+                            checkbox_type = "전체선택" if is_select_all else "개별상품"
+                            logger.info(f"체크박스 {i+1}: {checkbox_type}, visible={is_visible}, enabled={is_enabled}, aria-label='{aria_label}'")
+                            
+                        except Exception as e:
+                            logger.info(f"체크박스 {i+1}: 정보 확인 불가 - {e}")
+                    
+                    logger.info(f"체크박스 분류 결과: 전체선택={select_all_count}개, 개별상품={individual_count}개")
+                    
                 except Exception as e:
                     logger.error(f"체크박스 디버깅 중 오류: {e}")
                 return False
@@ -1357,12 +1406,15 @@ class PercentyDropdown:
                     )
                     count_text = count_element.text
                     
-                    # 숫자 추출
+                    # 콤마가 포함된 숫자 추출 (예: "4,253" -> 4253)
                     import re
-                    numbers = re.findall(r'\d+', count_text)
-                    if numbers:
-                        count = int(numbers[0])
-                        logger.info(f"검색된 상품 개수: {count}개")
+                    # 콤마를 포함한 연속된 숫자 패턴 찾기
+                    number_match = re.search(r'[\d,]+', count_text)
+                    if number_match:
+                        # 콤마 제거 후 정수로 변환
+                        number_str = number_match.group().replace(',', '')
+                        count = int(number_str)
+                        logger.info(f"검색된 상품 개수: {count}개 (원본 텍스트: '{count_text}')")
                         return count
                         
                 except (TimeoutException, NoSuchElementException):

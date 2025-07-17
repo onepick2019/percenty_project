@@ -1700,8 +1700,8 @@ class ProductEditorCore6_Dynamic2:
                 logger.warning("스마트스토어 배송정보 변경에 실패했지만 계속 진행합니다")
             
             # 7. 카페24 로그인해서 11번가 등록자료 가져오기
-            if not self._import_11st_products_from_cafe24():
-                logger.warning("카페24 11번가 상품 가져오기에 실패했지만 계속 진행합니다")
+            # if not self._import_11st_products_from_cafe24():
+            #     logger.warning("카페24 11번가 상품 가져오기에 실패했지만 계속 진행합니다")
             """
             
             # 8. 쿠팡 API 연동업체를 '넥스트엔진'으로 변경 및 로그아웃

@@ -92,10 +92,6 @@ class ProductNameEditor:
             
             new_name = current_name + current_suffix
             logger.info(f"새 상품명: {new_name}")
-
-            
-            new_name = current_name + current_suffix
-            logger.info(f"새 상품명: {new_name}")
             
             # 4. 상품명 입력 - 단일 방식 사용
             # 4.1. 입력필드 클릭해서 포커스 주기

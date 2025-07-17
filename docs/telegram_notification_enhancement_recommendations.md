@@ -10,8 +10,8 @@
 
 #### 1.1 환경 변수 활용
 ```python
-# 현재: 설정 파일에 토큰 직접 저장
-"bot_token": "7934942462:AAH8oII3Rg9HP4Wh4Hzkk5L3aeu4cXL4pVE"
+# 현재: 설정 파일에 토큰 직접 저장 (보안 위험)
+"bot_token": "YOUR_BOT_TOKEN_HERE"
 
 # 개선: 환경 변수 활용
 import os

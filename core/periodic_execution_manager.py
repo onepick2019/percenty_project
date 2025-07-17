@@ -185,52 +185,110 @@ class PeriodicExecutionManager:
         self.running_processes = []  # 실행 중인 프로세스 추적
         self.process_lock = threading.Lock()  # 프로세스 리스트 동기화
         
-        # 단계 6-2의 48시간 주기 실행을 위한 추적
-        self.step62_last_run = None  # 단계 6-2의 마지막 실행 시간
-        self.step62_config_file = Path(__file__).parent.parent / "step62_last_run.json"
-        self._load_step62_last_run()
+        # 단계 6-2의 48시간 주기 실행을 위한 추적 (계정별 관리)
+        self.step62_last_run_by_account = {}  # 계정별 단계 6-2의 마지막 실행 시간
+        self.step62_config_dir = Path(__file__).parent.parent / "step62_tracking"
+        self.step62_config_dir.mkdir(exist_ok=True)  # 디렉토리 생성
         
         # 프로젝트 루트 경로
         self.project_root = Path(__file__).parent.parent
         
-    def _load_step62_last_run(self):
-        """단계 6-2의 마지막 실행 시간을 파일에서 로드"""
+        # 기존 공유 파일을 계정별 파일로 마이그레이션
+        self._migrate_legacy_step62_file()
+        
+    def _migrate_legacy_step62_file(self):
+        """기존 공유 step62_last_run.json 파일을 계정별 파일로 마이그레이션"""
         try:
-            if self.step62_config_file.exists():
+            legacy_file = Path(__file__).parent.parent / "step62_last_run.json"
+            if legacy_file.exists():
                 import json
-                with open(self.step62_config_file, 'r', encoding='utf-8') as f:
+                with open(legacy_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     if 'last_run' in data:
                         from datetime import datetime
-                        self.step62_last_run = datetime.fromisoformat(data['last_run'])
-                        self._log(f"단계 6-2 마지막 실행 시간 로드: {self.step62_last_run}")
+                        legacy_time = datetime.fromisoformat(data['last_run'])
+                        
+                        # 모든 계정에 동일한 시간 적용 (기존 동작 유지)
+                        # 실제 계정 목록을 알 수 없으므로, 첫 실행 시 동적으로 처리
+                        self._legacy_step62_time = legacy_time
+                        self._log(f"기존 step62_last_run.json 파일 발견: {legacy_time}")
+                        self._log("계정별 실행 시 기존 시간이 적용됩니다.")
+                        
+                        # 백업 후 기존 파일 제거
+                        backup_file = legacy_file.with_suffix('.json.backup')
+                        legacy_file.rename(backup_file)
+                        self._log(f"기존 파일을 백업으로 이동: {backup_file}")
+            else:
+                self._legacy_step62_time = None
         except Exception as e:
-            self._log(f"단계 6-2 마지막 실행 시간 로드 실패: {e}")
-            self.step62_last_run = None
-    
-    def _save_step62_last_run(self):
-        """단계 6-2의 마지막 실행 시간을 파일에 저장"""
+            self._log(f"기존 step62 파일 마이그레이션 실패: {e}")
+            self._legacy_step62_time = None
+        
+    def _load_step62_last_run(self, account_id: str):
+        """계정별 단계 6-2의 마지막 실행 시간을 파일에서 로드"""
         try:
-            if self.step62_last_run:
+            config_file = self.step62_config_dir / f"step62_last_run_{account_id}.json"
+            if config_file.exists():
                 import json
-                data = {'last_run': self.step62_last_run.isoformat()}
-                with open(self.step62_config_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                self._log(f"단계 6-2 마지막 실행 시간 저장: {self.step62_last_run}")
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if 'last_run' in data:
+                        from datetime import datetime
+                        self.step62_last_run_by_account[account_id] = datetime.fromisoformat(data['last_run'])
+                        self._log(f"계정 {account_id} 단계 6-2 마지막 실행 시간 로드: {self.step62_last_run_by_account[account_id]}")
+            else:
+                # 기존 공유 파일의 시간이 있으면 적용
+                if hasattr(self, '_legacy_step62_time') and self._legacy_step62_time:
+                    self.step62_last_run_by_account[account_id] = self._legacy_step62_time
+                    self._save_step62_last_run(account_id)  # 계정별 파일로 저장
+                    self._log(f"계정 {account_id} 단계 6-2: 기존 공유 시간 적용 및 계정별 파일로 마이그레이션 완료")
+                else:
+                    self.step62_last_run_by_account[account_id] = None
+                    self._log(f"계정 {account_id} 단계 6-2 실행 이력 없음 (첫 실행)")
         except Exception as e:
-            self._log(f"단계 6-2 마지막 실행 시간 저장 실패: {e}")
+            self._log(f"계정 {account_id} 단계 6-2 마지막 실행 시간 로드 실패: {e}")
+            self.step62_last_run_by_account[account_id] = None
     
-    def _should_run_step62(self) -> bool:
-        """단계 6-2를 실행해야 하는지 확인 (48시간 주기)"""
-        if self.step62_last_run is None:
+    def _save_step62_last_run(self, account_id: str):
+        """계정별 단계 6-2의 마지막 실행 시간을 파일에 저장"""
+        try:
+            if account_id in self.step62_last_run_by_account and self.step62_last_run_by_account[account_id]:
+                import json
+                config_file = self.step62_config_dir / f"step62_last_run_{account_id}.json"
+                data = {
+                    'account_id': account_id,
+                    'last_run': self.step62_last_run_by_account[account_id].isoformat()
+                }
+                with open(config_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                self._log(f"계정 {account_id} 단계 6-2 마지막 실행 시간 저장: {self.step62_last_run_by_account[account_id]}")
+        except Exception as e:
+            self._log(f"계정 {account_id} 단계 6-2 마지막 실행 시간 저장 실패: {e}")
+    
+    def _should_run_step62(self, account_id: str) -> bool:
+        """계정별 단계 6-2를 실행해야 하는지 확인 (48시간 주기)"""
+        # 계정별 실행 이력이 없으면 로드
+        if account_id not in self.step62_last_run_by_account:
+            self._load_step62_last_run(account_id)
+        
+        last_run = self.step62_last_run_by_account.get(account_id)
+        if last_run is None:
             return True  # 처음 실행
         
         from datetime import datetime, timedelta
         now = datetime.now()
-        time_since_last_run = now - self.step62_last_run
+        time_since_last_run = now - last_run
         
         # 48시간(2일) 경과 확인
-        return time_since_last_run >= timedelta(hours=48)
+        should_run = time_since_last_run >= timedelta(hours=48)
+        
+        if should_run:
+            self._log(f"계정 {account_id} 단계 6-2: 마지막 실행 후 {time_since_last_run} 경과 (48시간 이상) - 실행 예정")
+        else:
+            remaining_time = timedelta(hours=48) - time_since_last_run
+            self._log(f"계정 {account_id} 단계 6-2: 마지막 실행 후 {time_since_last_run} 경과 (48시간 미만) - {remaining_time} 후 실행 가능")
+        
+        return should_run
         
     def set_config(self, config: Dict):
         """주기적 실행 설정
@@ -400,7 +458,7 @@ class PeriodicExecutionManager:
                         
                         # 단계 6-2의 48시간 주기 확인
                         if step == '62':
-                            if not self._should_run_step62():
+                            if not self._should_run_step62(account_id):
                                 self._log(f"계정 {account_id}, 단계 6-2: 48시간이 경과하지 않아 건너뜁니다.")
                                 continue
                             else:
@@ -413,8 +471,8 @@ class PeriodicExecutionManager:
                         # 단계 6-2 실행 성공 시 마지막 실행 시간 업데이트
                         if step == '62' and success:
                             from datetime import datetime
-                            self.step62_last_run = datetime.now()
-                            self._save_step62_last_run()
+                            self.step62_last_run_by_account[account_id] = datetime.now()
+                            self._save_step62_last_run(account_id)
                         
                         if success:
                             self._log(f"계정 {account_id}, 단계 {step} 완료")

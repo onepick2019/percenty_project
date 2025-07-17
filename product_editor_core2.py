@@ -451,12 +451,15 @@ class ProductEditorCore2:
                     )
                     count_text = count_element.text
                     
-                    # 숫자 추출
+                    # 콤마가 포함된 숫자 추출 (예: "4,253" -> 4253)
                     import re
-                    numbers = re.findall(r'\d+', count_text)
-                    if numbers:
-                        count = int(numbers[0])
-                        logging.info(f"검색된 상품 개수: {count}개")
+                    # 콤마를 포함한 연속된 숫자 패턴 찾기
+                    number_match = re.search(r'[\d,]+', count_text)
+                    if number_match:
+                        # 콤마 제거 후 정수로 변환
+                        number_str = number_match.group().replace(',', '')
+                        count = int(number_str)
+                        logging.info(f"검색된 상품 개수: {count}개 (원본 텍스트: '{count_text}')")
                         return count
                         
                 except (TimeoutException, NoSuchElementException):

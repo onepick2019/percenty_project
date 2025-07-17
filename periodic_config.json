@@ -1,29 +1,20 @@
 {
   "periodic_config": {
-    "step1_quantity": 500,
+    "step1_quantity": 3,
     "other_quantity": 100,
-    "step3_product_limit": 40,
-    "step3_image_limit": 200,
+    "step3_product_limit": 200,
+    "step3_image_limit": 2000,
     "selected_steps": [
-<<<<<<< HEAD
-      "313"
+      "1"
     ],
     "selected_accounts": [
+      "onepick2019@gmail.com",
+      "wop31garam@gmail.com",
       "wop32gsung@gmail.com"
     ],
-    "schedule_time": "15:34",
+    "schedule_time": "18:40",
     "step_interval": 10,
-    "account_delay": 60,
-=======
-      "63"
-    ],
-    "selected_accounts": [
-      "onepick2019@gmail.com"
-    ],
-    "schedule_time": "15:42",
-    "step_interval": 10,
-    "account_delay": 300,
->>>>>>> f4922c527baa5e235a8444055ded324c41ceb21d
+    "account_delay": 30,
     "chunk_sizes": {
       "1": 20,
       "51": 20,

@@ -281,12 +281,15 @@ class UploadUtils:
                     text = element.text
                     logger.info(f"선택된 상품 텍스트: {text}")
                     
-                    # 숫자 추출 (예: "선택 20개 상품" -> 20)
+                    # 숫자 추출 (예: "선택 20개 상품" -> 20, "선택 1,234개 상품" -> 1234)
                     import re
-                    numbers = re.findall(r'\d+', text)
-                    if numbers:
-                        count = int(numbers[0])
-                        logger.info(f"선택된 상품 개수: {count}개")
+                    # 콤마를 포함한 연속된 숫자 패턴 찾기
+                    number_match = re.search(r'[\d,]+', text)
+                    if number_match:
+                        # 콤마 제거 후 정수로 변환
+                        number_str = number_match.group().replace(',', '')
+                        count = int(number_str)
+                        logger.info(f"선택된 상품 개수: {count}개 (원본: '{text}')")
                         return count
                         
                 except (NoSuchElementException, ValueError):
@@ -1293,12 +1296,15 @@ class UploadUtils:
                     text = element.text.strip()
                     logger.info(f"번역 횟수 텍스트 발견: '{text}'")
                     
-                    # 숫자 추출 (예: "300회" -> 300)
+                    # 숫자 추출 (예: "300회" -> 300, "1,234회" -> 1234)
                     import re
-                    numbers = re.findall(r'\d+', text)
-                    if numbers:
-                        count = int(numbers[0])
-                        logger.info(f"추출된 번역 횟수: {count}")
+                    # 콤마를 포함한 연속된 숫자 패턴 찾기
+                    number_match = re.search(r'[\d,]+', text)
+                    if number_match:
+                        # 콤마 제거 후 정수로 변환
+                        number_str = number_match.group().replace(',', '')
+                        count = int(number_str)
+                        logger.info(f"추출된 번역 횟수: {count} (원본: '{text}')")
                         return count
                         
                 except (NoSuchElementException, ValueError):

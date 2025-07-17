@@ -12,11 +12,13 @@ import logging
 import threading
 import json
 import math
+import re
 from typing import Dict, List, Optional, Union, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
+from dotenv import load_dotenv
 
 # 루트 디렉토리를 경로에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -323,6 +325,9 @@ class BatchManager:
         Args:
             config_file: 설정 파일 경로
         """
+        # 환경변수 로드
+        load_dotenv()
+        
         self.config_file = config_file or "batch/config/batch_config.json"
         self.config = {}
         
@@ -374,15 +379,64 @@ class BatchManager:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     self.config = json.load(f)
+                    # 환경변수 플레이스홀더 치환
+                    self.config = self._substitute_env_variables(self.config)
                     logger.info(f"설정 파일 로드 완료: {self.config_file}")
             else:
                 # 기본 설정 생성
                 self.config = self._create_default_config()
                 self.save_config()
+                # 기본 설정에서도 환경변수 치환 실행
+                self.config = self._substitute_env_variables(self.config)
                 logger.info("기본 설정 파일 생성")
         except Exception as e:
             logger.error(f"설정 파일 로드 중 오류: {e}")
             self.config = self._create_default_config()
+            # 오류 발생 시에도 환경변수 치환 실행
+            self.config = self._substitute_env_variables(self.config)
+    
+    def _substitute_env_variables(self, config_dict):
+        """
+        설정 딕셔너리에서 환경변수 플레이스홀더를 실제 값으로 치환
+        
+        Args:
+            config_dict: 설정 딕셔너리
+            
+        Returns:
+            Dict: 환경변수가 치환된 설정 딕셔너리
+        """
+        logger.debug(f"환경변수 치환 시작: {type(config_dict)}")
+        
+        if isinstance(config_dict, dict):
+            result = {}
+            for key, value in config_dict.items():
+                logger.debug(f"딕셔너리 키 처리: {key} = {value}")
+                result[key] = self._substitute_env_variables(value)
+            return result
+        elif isinstance(config_dict, list):
+            return [self._substitute_env_variables(item) for item in config_dict]
+        elif isinstance(config_dict, str):
+            # ${VAR_NAME} 패턴 찾기
+            pattern = r'\$\{([^}]+)\}'
+            matches = re.findall(pattern, config_dict)
+            
+            logger.debug(f"문자열 처리: '{config_dict}', 매치: {matches}")
+            
+            result = config_dict
+            for var_name in matches:
+                env_value = os.getenv(var_name)
+                logger.info(f"환경변수 확인: {var_name} = {env_value}")
+                
+                if env_value is not None:
+                    result = result.replace(f'${{{var_name}}}', env_value)
+                    logger.info(f"환경변수 치환 성공: {var_name} -> {env_value[:10]}...")
+                else:
+                    logger.warning(f"환경변수를 찾을 수 없습니다: {var_name}")
+            
+            logger.debug(f"치환 결과: '{config_dict}' -> '{result}'")
+            return result
+        else:
+            return config_dict
     
     def _create_default_config(self) -> Dict:
         """
@@ -408,9 +462,9 @@ class BatchManager:
                 'file': 'logs/batch_manager.log'
             },
             'telegram': {
-                'enabled': False,
-                'bot_token': '',
-                'chat_id': '',
+                'enabled': True,
+                'bot_token': '${TELEGRAM_BOT_TOKEN}',
+                'chat_id': '${TELEGRAM_CHAT_ID}',
                 'notify_start': True,
                 'notify_complete': True,
                 'notify_error': True,
@@ -437,27 +491,53 @@ class BatchManager:
         try:
             telegram_config = self.config.get('telegram', {})
             
+            logger.info(f"텔레그램 설정 확인:")
+            logger.info(f"  - enabled: {telegram_config.get('enabled', False)}")
+            logger.info(f"  - bot_token 존재: {bool(telegram_config.get('bot_token'))}")
+            logger.info(f"  - chat_id 존재: {bool(telegram_config.get('chat_id'))}")
+            logger.info(f"  - TelegramNotifier 클래스 사용 가능: {TelegramNotifier is not None}")
+            
             if (TelegramNotifier and 
                 telegram_config.get('enabled', False) and 
                 telegram_config.get('bot_token') and 
                 telegram_config.get('chat_id')):
                 
+                bot_token = telegram_config['bot_token']
+                chat_id = telegram_config['chat_id']
+                
+                logger.info(f"텔레그램 알림 초기화 중...")
+                logger.info(f"  - 봇 토큰: {bot_token[:10]}...")
+                logger.info(f"  - 채팅 ID: {chat_id}")
+                
                 self.telegram_notifier = TelegramNotifier(
-                    bot_token=telegram_config['bot_token'],
-                    chat_id=telegram_config['chat_id']
+                    bot_token=bot_token,
+                    chat_id=chat_id
                 )
                 
                 # 연결 테스트
+                logger.info("텔레그램 봇 연결 테스트 중...")
                 if self.telegram_notifier.test_connection():
-                    logger.info("텔레그램 알림이 성공적으로 설정되었습니다.")
+                    logger.info("✅ 텔레그램 알림이 성공적으로 설정되었습니다.")
                 else:
-                    logger.warning("텔레그램 알림 연결 테스트에 실패했습니다.")
+                    logger.warning("❌ 텔레그램 알림 연결 테스트에 실패했습니다.")
                     self.telegram_notifier = None
             else:
-                logger.info("텔레그램 알림이 비활성화되어 있습니다.")
+                missing_items = []
+                if not TelegramNotifier:
+                    missing_items.append("TelegramNotifier 클래스")
+                if not telegram_config.get('enabled', False):
+                    missing_items.append("enabled=false")
+                if not telegram_config.get('bot_token'):
+                    missing_items.append("bot_token")
+                if not telegram_config.get('chat_id'):
+                    missing_items.append("chat_id")
+                
+                logger.info(f"텔레그램 알림이 비활성화되어 있습니다. 누락된 항목: {', '.join(missing_items)}")
                 
         except Exception as e:
             logger.error(f"텔레그램 알림 설정 중 오류: {e}")
+            import traceback
+            logger.error(f"상세 오류: {traceback.format_exc()}")
             self.telegram_notifier = None
     
     def _send_telegram_notification(self, notification_type: str, **kwargs):
@@ -1413,7 +1493,18 @@ class BatchManager:
                             result['processed'] = 0
                             result['failed'] = 0
                             result['should_stop_batch'] = True  # 배치분할 중단 플래그 설정
-                            account_logger.warning("⚠️ 번역 가능한 상품이 부족하여 4단계가 스킵되었습니다. 후속 배치분할을 중단합니다.")
+                            warning_message = "⚠️ 번역 가능한 상품이 부족하여 4단계가 스킵되었습니다. 후속 배치분할을 중단합니다."
+                            account_logger.warning(warning_message)
+                            
+                            # 텔레그램 경고 알림 전송
+                            real_account_id = get_real_account_id(account_id)
+                            self._send_telegram_notification(
+                                'warning',
+                                account_id=real_account_id,
+                                step_name="Step 4",
+                                server_name="배치 서버",
+                                warning_message=warning_message
+                            )
                         else:
                             # 정상 완료된 경우
                             result['success'] = True
@@ -1423,7 +1514,18 @@ class BatchManager:
                             # 처리된 수량이 요청 수량보다 적으면 배치분할 중단
                             if result['processed'] < quantity:
                                 result['should_stop_batch'] = True
-                                account_logger.warning(f"⚠️ 처리된 수량({result['processed']})이 요청 수량({quantity})보다 적습니다. 후속 배치분할을 중단합니다.")
+                                warning_message = f"⚠️ 처리된 수량({result['processed']})이 요청 수량({quantity})보다 적습니다. 후속 배치분할을 중단합니다."
+                                account_logger.warning(warning_message)
+                                
+                                # 텔레그램 경고 알림 전송
+                                real_account_id = get_real_account_id(account_id)
+                                self._send_telegram_notification(
+                                    'warning',
+                                    account_id=real_account_id,
+                                    step_name="Step 4",
+                                    server_name="배치 서버",
+                                    warning_message=warning_message
+                                )
                     else:
                         # 실패한 경우
                         result['success'] = False
@@ -2395,8 +2497,20 @@ class BatchManager:
                     
                     # 배치분할 중단 플래그 확인
                     if chunk_result.get('should_stop_batch', False):
-                        account_logger.warning(f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다.")
+                        warning_message = f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다."
+                        account_logger.warning(warning_message)
                         account_logger.info(f"총 {chunk_idx + 1}/{total_chunks} 청크 완료 후 중단")
+                        
+                        # 텔레그램 경고 알림 전송
+                        real_account_id = get_real_account_id(account_id)
+                        self._send_telegram_notification(
+                            'warning',
+                            account_id=real_account_id,
+                            step_name="Step 1",
+                            server_name="배치 서버",
+                            warning_message=warning_message
+                        )
+                        
                         # 현재 브라우저 종료 후 루프 탈출
                         self.browser_manager.close_browser(current_browser_id)
                         break
@@ -2727,7 +2841,18 @@ class BatchManager:
                     if chunk_result.get('success', False):
                         if chunk_result.get('skipped', False):
                             # 스킵된 경우 - 번역 가능한 상품 부족
-                            account_logger.warning(f"⚠️ 청크 {chunk_idx + 1}에서 번역 가능한 상품이 부족하여 스킵되었습니다. 후속 배치분할을 중단합니다.")
+                            warning_message = f"⚠️ 청크 {chunk_idx + 1}에서 번역 가능한 상품이 부족하여 스킵되었습니다. 후속 배치분할을 중단합니다."
+                            account_logger.warning(warning_message)
+                            
+                            # 텔레그램 경고 알림 전송
+                            self._send_telegram_notification(
+                                'warning',
+                                account_id=real_account_id,
+                                step_name="Step 4",
+                                server_name="배치 서버",
+                                warning_message=warning_message
+                            )
+                            
                             total_result['should_stop_batch'] = True
                             total_result['skipped'] = True
                             break
@@ -2738,7 +2863,18 @@ class BatchManager:
                             
                             # 처리된 수량이 요청 수량보다 적으면 배치분할 중단
                             if processed_count < current_chunk_size:
-                                account_logger.warning(f"⚠️ 청크 {chunk_idx + 1}에서 처리된 수량({processed_count})이 요청 수량({current_chunk_size})보다 적습니다. 후속 배치분할을 중단합니다.")
+                                warning_message = f"⚠️ 청크 {chunk_idx + 1}에서 처리된 수량({processed_count})이 요청 수량({current_chunk_size})보다 적습니다. 후속 배치분할을 중단합니다."
+                                account_logger.warning(warning_message)
+                                
+                                # 텔레그램 경고 알림 전송
+                                self._send_telegram_notification(
+                                    'warning',
+                                    account_id=real_account_id,
+                                    step_name="Step 4",
+                                    server_name="배치 서버",
+                                    warning_message=warning_message
+                                )
+                                
                                 total_result['should_stop_batch'] = True
                                 break
                     else:
@@ -2834,8 +2970,20 @@ class BatchManager:
                     account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 {chunk_result['processed']}개, 실패 {chunk_result['failed']}개")
                     
                     if chunk_result.get('should_stop_batch', False):
-                        account_logger.warning(f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다.")
+                        warning_message = f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다."
+                        account_logger.warning(warning_message)
                         account_logger.info(f"총 {chunk_idx + 1}/{total_chunks} 청크 완료 후 중단")
+                        
+                        # 텔레그램 경고 알림 전송
+                        real_account_id = get_real_account_id(account_id)
+                        self._send_telegram_notification(
+                            'warning',
+                            account_id=real_account_id,
+                            step_name="Step 5_1",
+                            server_name="배치 서버",
+                            warning_message=warning_message
+                        )
+                        
                         self.browser_manager.close_browser(current_browser_id)
                         break
                     
@@ -2926,8 +3074,20 @@ class BatchManager:
                     account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 {chunk_result['processed']}개, 실패 {chunk_result['failed']}개")
                     
                     if chunk_result.get('should_stop_batch', False):
-                        account_logger.warning(f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다.")
+                        warning_message = f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다."
+                        account_logger.warning(warning_message)
                         account_logger.info(f"총 {chunk_idx + 1}/{total_chunks} 청크 완료 후 중단")
+                        
+                        # 텔레그램 경고 알림 전송
+                        real_account_id = get_real_account_id(account_id)
+                        self._send_telegram_notification(
+                            'warning',
+                            account_id=real_account_id,
+                            step_name="Step 5_2",
+                            server_name="배치 서버",
+                            warning_message=warning_message
+                        )
+                        
                         self.browser_manager.close_browser(current_browser_id)
                         break
                     
@@ -3018,8 +3178,20 @@ class BatchManager:
                     account_logger.info(f"청크 {chunk_idx + 1} 완료: 처리 {chunk_result['processed']}개, 실패 {chunk_result['failed']}개")
                     
                     if chunk_result.get('should_stop_batch', False):
-                        account_logger.warning(f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다.")
+                        warning_message = f"⚠️ 청크 {chunk_idx + 1}에서 비그룹상품이 0개가 되어 후속 배치분할을 중단합니다."
+                        account_logger.warning(warning_message)
                         account_logger.info(f"총 {chunk_idx + 1}/{total_chunks} 청크 완료 후 중단")
+                        
+                        # 텔레그램 경고 알림 전송
+                        real_account_id = get_real_account_id(account_id)
+                        self._send_telegram_notification(
+                            'warning',
+                            account_id=real_account_id,
+                            step_name="Step 5_3",
+                            server_name="배치 서버",
+                            warning_message=warning_message
+                        )
+                        
                         self.browser_manager.close_browser(current_browser_id)
                         break
                     
